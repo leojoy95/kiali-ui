@@ -1,5 +1,5 @@
 # Snyk (https://snyk.io) policy file, patches or ignores known vulnerabilities.
-version: v1.13.3
+version: v1.14.1
 # ignores vulnerabilities until expiry date; change duration by modifying expiry date
 ignore:
   'npm:bootstrap:20160627':
@@ -780,3 +780,53 @@ patch:
   SNYK-JS-AXIOS-174505:
     - axios:
         patched: '2019-05-06T06:42:36.811Z'
+  SNYK-JS-LODASH-567746:
+    - babel-core > lodash:
+        patched: '2020-05-08T21:58:34.847Z'
+    - enzyme-to-json > lodash:
+        patched: '2020-05-08T21:58:34.847Z'
+    - node-sass > lodash:
+        patched: '2020-05-08T21:58:34.847Z'
+    - snyk > lodash:
+        patched: '2020-05-08T21:58:34.847Z'
+    - babel-core > babel-generator > lodash:
+        patched: '2020-05-08T21:58:34.847Z'
+    - babel-core > babel-register > lodash:
+        patched: '2020-05-08T21:58:34.847Z'
+    - enzyme > cheerio > lodash:
+        patched: '2020-05-08T21:58:34.847Z'
+    - node-sass > sass-graph > lodash:
+        patched: '2020-05-08T21:58:34.847Z'
+    - snyk > @snyk/dep-graph > lodash:
+        patched: '2020-05-08T21:58:34.847Z'
+    - snyk > inquirer > lodash:
+        patched: '2020-05-08T21:58:34.847Z'
+    - snyk > snyk-config > lodash:
+        patched: '2020-05-08T21:58:34.847Z'
+    - snyk > snyk-mvn-plugin > lodash:
+        patched: '2020-05-08T21:58:34.847Z'
+    - snyk > snyk-nodejs-lockfile-parser > lodash:
+        patched: '2020-05-08T21:58:34.847Z'
+    - snyk > snyk-nuget-plugin > lodash:
+        patched: '2020-05-08T21:58:34.847Z'
+    - babel-core > babel-generator > babel-types > lodash:
+        patched: '2020-05-08T21:58:34.847Z'
+    - babel-core > babel-helpers > babel-template > lodash:
+        patched: '2020-05-08T21:58:34.847Z'
+    - babel-core > babel-register > babel-core > lodash:
+        patched: '2020-05-08T21:58:34.847Z'
+    - snyk > @snyk/dep-graph > graphlib > lodash:
+        patched: '2020-05-08T21:58:34.847Z'
+    - node-sass > gaze > globule > lodash:
+        patched: '2020-05-08T21:58:34.847Z'
+    - snyk > snyk-nuget-plugin > dotnet-deps-parser > lodash:
+        patched: '2020-05-08T21:58:34.847Z'
+    - snyk > snyk-php-plugin > @snyk/composer-lockfile-parser > lodash:
+        patched: '2020-05-08T21:58:34.847Z'
+    - babel-core > babel-helpers > babel-template > babel-traverse > lodash:
+        patched: '2020-05-08T21:58:34.847Z'
+    - snyk > @snyk/snyk-cocoapods-plugin > @snyk/cocoapods-lockfile-parser > @snyk/ruby-semver > lodash:
+        patched: '2020-05-08T21:58:34.847Z'
+  SNYK-JS-TREEKILL-536781:
+    - snyk > snyk-sbt-plugin > tree-kill:
+        patched: '2020-05-08T21:58:34.847Z'
