@@ -62,7 +62,7 @@
     "@patternfly/react-table": "2.24.41",
     "@patternfly/react-tokens": "2.7.10",
     "@webcomponents/custom-elements": "1.2.4",
-    "axios": "0.18.1",
+    "axios": "0.21.1",
     "bootstrap-slider-without-jquery": "10.0.0",
     "csstips": "0.3.0",
     "csx": "9.0.0",
