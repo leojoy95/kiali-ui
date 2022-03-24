@@ -1,37 +1,43 @@
 import * as React from 'react';
 import { connect } from 'react-redux';
+import { bindActionCreators } from 'redux';
+import { ThunkDispatch } from 'redux-thunk';
 import { RouteComponentProps, withRouter } from 'react-router';
-import { Card, CardBody, Grid, GridItem, Toolbar, ToolbarGroup, ToolbarItem } from '@patternfly/react-core';
-import { Dashboard, DashboardModel, ExternalLink, Overlay, VCDataPoint } from '@kiali/k-charted-pf4';
+import { Card, CardBody, Toolbar, ToolbarGroup, ToolbarItem } from '@patternfly/react-core';
 import { style } from 'typestyle';
-
-import RefreshContainer from '../../components/Refresh/Refresh';
-import { RenderComponentScroll } from '../../components/Nav/Page';
-import * as API from '../../services/Api';
-import { KialiAppState } from '../../store/Store';
-import { TimeRange, evalTimeRange } from '../../types/Common';
-import { Direction, IstioMetricsOptions, Reporter } from '../../types/MetricsOptions';
-import * as AlertUtils from '../../utils/AlertUtils';
-
+import * as API from 'services/Api';
+import { KialiAppState } from 'store/Store';
+import { TimeRange, evalTimeRange, TimeInMilliseconds, isEqualTimeRange } from 'types/Common';
+import { Direction, IstioMetricsOptions, Reporter } from 'types/MetricsOptions';
+import * as AlertUtils from 'utils/AlertUtils';
+import { RenderComponentScroll } from 'components/Nav/Page';
 import * as MetricsHelper from './Helper';
 import { MetricsSettings, LabelsSettings } from '../MetricsOptions/MetricsSettings';
 import { MetricsSettingsDropdown } from '../MetricsOptions/MetricsSettingsDropdown';
 import MetricsReporter from '../MetricsOptions/MetricsReporter';
-import history, { URLParam } from '../../app/History';
-import { MetricsObjectTypes } from '../../types/Metrics';
-import { GrafanaInfo } from '../../types/GrafanaInfo';
-import { MessageType } from '../../types/MessageCenter';
+import history, { URLParam } from 'app/History';
+import { MetricsObjectTypes } from 'types/Metrics';
+import { GrafanaInfo } from 'types/GrafanaInfo';
+import { MessageType } from 'types/MessageCenter';
 import { GrafanaLinks } from './GrafanaLinks';
-import { SpanOverlay } from './SpanOverlay';
-import TimeRangeComponent from 'components/Time/TimeRangeComponent';
-import { retrieveTimeRange, storeBounds } from 'components/Time/TimeRangeHelper';
+import { SpanOverlay, JaegerLineInfo } from './SpanOverlay';
+import { DashboardModel, ExternalLink } from 'types/Dashboards';
+import { Overlay } from 'types/Overlay';
+import { RawOrBucket } from 'types/VictoryChartInfo';
+import { Dashboard } from 'components/Charts/Dashboard';
+import { timeRangeSelector } from 'store/Selectors';
+import { KialiAppAction } from 'actions/KialiAppAction';
+import { UserSettingsActions } from 'actions/UserSettingsActions';
+import { maximizeButtonStyle } from '../Charts/KChart';
 
 type MetricsState = {
   dashboard?: DashboardModel;
   labelsSettings: LabelsSettings;
   grafanaLinks: ExternalLink[];
-  spanOverlay?: Overlay;
-  timeRange: TimeRange;
+  spanOverlay?: Overlay<JaegerLineInfo>;
+  tabHeight: number;
+  showSpans: boolean;
+  showTrendlines: boolean;
 };
 
 type ObjectId = {
@@ -48,34 +54,51 @@ type IstioMetricsProps = ObjectId &
 type Props = IstioMetricsProps & {
   // Redux props
   jaegerIntegration: boolean;
+  lastRefreshAt: TimeInMilliseconds;
+  timeRange: TimeRange;
+  setTimeRange: (range: TimeRange) => void;
 };
 
 const displayFlex = style({
   display: 'flex'
 });
 
+const fullHeightStyle = style({
+  height: '100%'
+});
+
 class IstioMetrics extends React.Component<Props, MetricsState> {
+  toolbarRef: React.RefObject<HTMLDivElement>;
   options: IstioMetricsOptions;
   spanOverlay: SpanOverlay;
   static grafanaInfoPromise: Promise<GrafanaInfo | undefined> | undefined;
 
   constructor(props: Props) {
     super(props);
-
+    this.toolbarRef = React.createRef<HTMLDivElement>();
     const settings = MetricsHelper.retrieveMetricsSettings();
-    const timeRange = retrieveTimeRange() || MetricsHelper.defaultMetricsDuration;
     this.options = this.initOptions(settings);
     // Initialize active filters from URL
-    this.state = { labelsSettings: settings.labelsSettings, grafanaLinks: [], timeRange: timeRange };
+    this.state = {
+      labelsSettings: settings.labelsSettings,
+      grafanaLinks: [],
+      tabHeight: 300,
+      showSpans: settings.showSpans,
+      showTrendlines: settings.showTrendlines
+    };
     this.spanOverlay = new SpanOverlay(changed => this.setState({ spanOverlay: changed }));
   }
 
-  initOptions(settings: MetricsSettings): IstioMetricsOptions {
+  private initOptions(settings: MetricsSettings): IstioMetricsOptions {
     const options: IstioMetricsOptions = {
       reporter: MetricsReporter.initialReporter(this.props.direction),
       direction: this.props.direction
     };
-    MetricsHelper.settingsToOptions(settings, options);
+    const defaultLabels = [
+      this.props.direction === 'inbound' ? 'source_canonical_service' : 'destination_canonical_service',
+      this.props.direction === 'inbound' ? 'source_workload_namespace' : 'destination_workload_namespace'
+    ];
+    MetricsHelper.settingsToOptions(settings, options, defaultLabels);
     return options;
   }
 
@@ -84,20 +107,44 @@ class IstioMetrics extends React.Component<Props, MetricsState> {
     this.refresh();
   }
 
-  refresh = () => {
+  componentDidUpdate(prevProps: Props) {
+    if (
+      this.props.direction !== prevProps.direction ||
+      this.props.namespace !== prevProps.namespace ||
+      this.props.object !== prevProps.object ||
+      this.props.objectType !== prevProps.objectType ||
+      this.props.lastRefreshAt !== prevProps.lastRefreshAt ||
+      !isEqualTimeRange(this.props.timeRange, prevProps.timeRange)
+    ) {
+      if (this.props.direction !== prevProps.direction) {
+        const settings = MetricsHelper.retrieveMetricsSettings();
+        this.options = this.initOptions(settings);
+        this.setState({
+          labelsSettings: settings.labelsSettings,
+          showSpans: settings.showSpans,
+          showTrendlines: settings.showTrendlines
+        });
+      }
+      this.spanOverlay.reset();
+      this.refresh();
+    }
+  }
+
+  private refresh = () => {
     this.fetchMetrics();
     if (this.props.jaegerIntegration) {
-      this.spanOverlay.fetch(
-        this.props.namespace,
-        this.props.object,
-        this.options.duration || MetricsHelper.defaultMetricsDuration
-      );
+      this.spanOverlay.fetch({
+        namespace: this.props.namespace,
+        target: this.props.object,
+        targetKind: this.props.objectType,
+        range: this.props.timeRange
+      });
     }
   };
 
-  fetchMetrics = () => {
+  private fetchMetrics = () => {
     // Time range needs to be reevaluated everytime fetching
-    MetricsHelper.timeRangeToOptions(this.state.timeRange, this.options);
+    MetricsHelper.timeRangeToOptions(this.props.timeRange, this.options);
     let promise: Promise<API.Response<DashboardModel>>;
     switch (this.props.objectType) {
       case MetricsObjectTypes.WORKLOAD:
@@ -125,7 +172,7 @@ class IstioMetrics extends React.Component<Props, MetricsState> {
       });
   };
 
-  fetchGrafanaInfo() {
+  private fetchGrafanaInfo() {
     if (!IstioMetrics.grafanaInfoPromise) {
       IstioMetrics.grafanaInfoPromise = API.getGrafanaInfo().then(response => {
         if (response.status === 204) {
@@ -143,42 +190,47 @@ class IstioMetrics extends React.Component<Props, MetricsState> {
         }
       })
       .catch(err => {
-        AlertUtils.addError(
-          'Could not fetch Grafana info. Turning off links to Grafana.',
-          err,
-          'default',
-          MessageType.INFO
-        );
+        AlertUtils.addMessage({
+          ...AlertUtils.extractAxiosError('Could not fetch Grafana info. Turning off links to Grafana.', err),
+          group: 'default',
+          type: MessageType.INFO,
+          showNotification: false
+        });
       });
   }
 
-  onMetricsSettingsChanged = (settings: MetricsSettings) => {
-    MetricsHelper.settingsToOptions(settings, this.options);
+  private onMetricsSettingsChanged = (settings: MetricsSettings) => {
+    const defaultLabels = [
+      this.props.direction === 'inbound' ? 'source_canonical_service' : 'destination_canonical_service'
+    ];
+    MetricsHelper.settingsToOptions(settings, this.options, defaultLabels);
     this.fetchMetrics();
   };
 
-  onLabelsFiltersChanged = (labelsFilters: LabelsSettings) => {
+  private onLabelsFiltersChanged = (labelsFilters: LabelsSettings) => {
     this.setState({ labelsSettings: labelsFilters });
   };
 
-  onTimeFrameChanged = (range: TimeRange) => {
-    this.setState({ timeRange: range }, () => {
-      this.spanOverlay.resetLastFetchTime();
-      this.refresh();
-    });
-  };
-
-  onReporterChanged = (reporter: Reporter) => {
+  private onReporterChanged = (reporter: Reporter) => {
     this.options.reporter = reporter;
     this.fetchMetrics();
   };
 
-  onClickDataPoint = (_, datum: VCDataPoint) => {
-    if ('traceId' in datum) {
+  private onClickDataPoint = (_, datum: RawOrBucket<JaegerLineInfo>) => {
+    if ('start' in datum && 'end' in datum) {
+      // Zoom-in bucket
+      this.onDomainChange([datum.start as Date, datum.end as Date]);
+    } else if ('traceId' in datum) {
+      const traceId = datum.traceId;
+      const spanId = datum.spanId;
+      const domain =
+        this.props.objectType === MetricsObjectTypes.APP
+          ? 'applications'
+          : this.props.objectType === MetricsObjectTypes.SERVICE
+          ? 'services'
+          : 'workloads';
       history.push(
-        `/namespaces/${this.props.namespace}/services/${this.props.object}?tab=traces&${URLParam.JAEGER_TRACE_ID}=${
-          datum.traceId
-        }`
+        `/namespaces/${this.props.namespace}/${domain}/${this.props.object}?tab=traces&${URLParam.JAEGER_TRACE_ID}=${traceId}&${URLParam.JAEGER_SPAN_ID}=${spanId}`
       );
     }
   };
@@ -189,85 +241,137 @@ class IstioMetrics extends React.Component<Props, MetricsState> {
         from: dates[0].getTime(),
         to: dates[1].getTime()
       };
-      storeBounds(range);
-      this.onTimeFrameChanged(range);
+      this.props.setTimeRange(range);
     }
   }
 
   render() {
-    if (!this.state.dashboard) {
-      return this.renderOptionsBar();
-    }
-
     const urlParams = new URLSearchParams(history.location.search);
     const expandedChart = urlParams.get('expand') || undefined;
 
+    // 20px (card margin) + 24px (card padding) + 51px (toolbar) + 15px (toolbar padding) + 24px (card padding) + 20px (card margin)
+    const toolbarHeight = this.toolbarRef.current ? this.toolbarRef.current.clientHeight : 51;
+    const toolbarSpace = 20 + 24 + toolbarHeight + 15 + 24 + 20;
+    const dashboardHeight = this.state.tabHeight - toolbarSpace;
     return (
-      <RenderComponentScroll>
-        <Grid style={{ padding: '20px' }}>
-          <GridItem span={12}>
-            <Card>
-              <CardBody>
-                {this.renderOptionsBar()}
-                <Dashboard
-                  dashboard={this.state.dashboard}
-                  labelValues={MetricsHelper.convertAsPromLabels(this.state.labelsSettings)}
-                  expandedChart={expandedChart}
-                  expandHandler={this.expandHandler}
-                  onClick={this.onClickDataPoint}
-                  labelPrettifier={MetricsHelper.prettyLabelValues}
-                  overlay={this.state.spanOverlay}
-                  timeWindow={evalTimeRange(retrieveTimeRange() || MetricsHelper.defaultMetricsDuration)}
-                  brushHandlers={{ onDomainChangeEnd: (_, props) => this.onDomainChange(props.currentDomain.x) }}
-                />
-              </CardBody>
-            </Card>
-          </GridItem>
-        </Grid>
+      <RenderComponentScroll onResize={height => this.setState({ tabHeight: height })}>
+        <Card className={fullHeightStyle}>
+          <CardBody>
+            {this.renderOptionsBar()}
+            {this.state.dashboard && (
+              <Dashboard
+                dashboard={this.state.dashboard}
+                labelValues={MetricsHelper.convertAsPromLabels(this.state.labelsSettings)}
+                maximizedChart={expandedChart}
+                expandHandler={this.expandHandler}
+                onClick={this.onClickDataPoint}
+                labelPrettifier={MetricsHelper.prettyLabelValues}
+                overlay={this.state.spanOverlay}
+                showSpans={this.state.showSpans}
+                showTrendlines={this.state.showTrendlines}
+                dashboardHeight={dashboardHeight}
+                timeWindow={evalTimeRange(this.props.timeRange)}
+                brushHandlers={{ onDomainChangeEnd: (_, props) => this.onDomainChange(props.currentDomain.x) }}
+              />
+            )}
+          </CardBody>
+        </Card>
       </RenderComponentScroll>
     );
   }
 
-  renderOptionsBar() {
+  private onSpans = (checked: boolean) => {
+    const urlParams = new URLSearchParams(history.location.search);
+    urlParams.set(URLParam.SHOW_SPANS, String(checked));
+    history.replace(history.location.pathname + '?' + urlParams.toString());
+    this.setState({ showSpans: !this.state.showSpans });
+  };
+
+  private onTrendlines = (checked: boolean) => {
+    const urlParams = new URLSearchParams(history.location.search);
+    urlParams.set(URLParam.SHOW_TRENDLINES, String(checked));
+    history.replace(history.location.pathname + '?' + urlParams.toString());
+    this.setState({ showTrendlines: !this.state.showTrendlines });
+  };
+
+  private renderOptionsBar() {
     return (
-      <Toolbar style={{ paddingBottom: 8 }}>
-        <ToolbarGroup>
-          <ToolbarItem>
-            <MetricsSettingsDropdown
-              onChanged={this.onMetricsSettingsChanged}
-              onLabelsFiltersChanged={this.onLabelsFiltersChanged}
-              labelsSettings={this.state.labelsSettings}
-              hasHistograms={true}
+      <div ref={this.toolbarRef}>
+        <Toolbar style={{ paddingBottom: 15 }}>
+          <ToolbarGroup>
+            <ToolbarItem>
+              <MetricsSettingsDropdown
+                onChanged={this.onMetricsSettingsChanged}
+                onLabelsFiltersChanged={this.onLabelsFiltersChanged}
+                direction={this.props.direction}
+                labelsSettings={this.state.labelsSettings}
+                hasHistograms={true}
+              />
+            </ToolbarItem>
+          </ToolbarGroup>
+          <ToolbarGroup>
+            <ToolbarItem className={displayFlex}>
+              <MetricsReporter
+                onChanged={this.onReporterChanged}
+                direction={this.props.direction}
+                reporter={this.options.reporter}
+              />
+            </ToolbarItem>
+          </ToolbarGroup>
+          <ToolbarGroup>
+            <ToolbarItem className={displayFlex}>
+              <div style={maximizeButtonStyle} className="pf-c-check">
+                <label
+                  className="pf-c-check__label"
+                  style={{
+                    paddingLeft: '5px',
+                    paddingRight: '5px'
+                  }}
+                >
+                  <input
+                    key={`spans-show-chart`}
+                    id={`spans-show-`}
+                    className="pf-c-check__input"
+                    type="checkbox"
+                    checked={this.state.showSpans}
+                    onChange={event => this.onSpans(event.target.checked)}
+                  />
+                  &nbsp; Spans
+                </label>
+              </div>
+            </ToolbarItem>
+            <ToolbarItem className={displayFlex}>
+              <div style={maximizeButtonStyle} className="pf-c-check">
+                <label
+                  className="pf-c-check__label"
+                  style={{
+                    paddingLeft: '5px',
+                    paddingRight: '5px'
+                  }}
+                >
+                  <input
+                    key={`trendlines-show-chart`}
+                    id={`trendlines-show-`}
+                    className="pf-c-check__input"
+                    type="checkbox"
+                    checked={this.state.showTrendlines}
+                    onChange={event => this.onTrendlines(event.target.checked)}
+                  />
+                  &nbsp; Trendlines
+                </label>
+              </div>
+            </ToolbarItem>
+          </ToolbarGroup>
+          <ToolbarGroup style={{ marginLeft: 'auto', paddingRight: '20px' }}>
+            <GrafanaLinks
+              links={this.state.grafanaLinks}
+              namespace={this.props.namespace}
+              object={this.props.object}
+              objectType={this.props.objectType}
             />
-          </ToolbarItem>
-        </ToolbarGroup>
-        <ToolbarGroup>
-          <ToolbarItem className={displayFlex}>
-            <MetricsReporter onChanged={this.onReporterChanged} direction={this.props.direction} />
-          </ToolbarItem>
-        </ToolbarGroup>
-        <ToolbarGroup>
-          <GrafanaLinks
-            links={this.state.grafanaLinks}
-            namespace={this.props.namespace}
-            object={this.props.object}
-            objectType={this.props.objectType}
-          />
-        </ToolbarGroup>
-        <ToolbarGroup style={{ marginLeft: 'auto', marginRight: 0 }}>
-          <ToolbarItem>
-            <TimeRangeComponent
-              range={this.state.timeRange}
-              onChanged={this.onTimeFrameChanged}
-              tooltip={'Time range for metrics'}
-              allowCustom={true}
-            />
-          </ToolbarItem>
-          <ToolbarItem>
-            <RefreshContainer id="metrics-refresh" handleRefresh={this.refresh} hideLabel={true} />
-          </ToolbarItem>
-        </ToolbarGroup>
-      </Toolbar>
+          </ToolbarGroup>
+        </Toolbar>
+      </div>
     );
   }
 
@@ -283,12 +387,20 @@ class IstioMetrics extends React.Component<Props, MetricsState> {
 
 const mapStateToProps = (state: KialiAppState) => {
   return {
-    jaegerIntegration: state.jaegerState ? state.jaegerState.integration : false
+    jaegerIntegration: state.jaegerState.info ? state.jaegerState.info.integration : false,
+    lastRefreshAt: state.globalState.lastRefreshAt,
+    timeRange: timeRangeSelector(state)
+  };
+};
+
+const mapDispatchToProps = (dispatch: ThunkDispatch<KialiAppState, void, KialiAppAction>) => {
+  return {
+    setTimeRange: bindActionCreators(UserSettingsActions.setTimeRange, dispatch)
   };
 };
 
 const IstioMetricsContainer = withRouter<RouteComponentProps<{}> & IstioMetricsProps, any>(
-  connect(mapStateToProps)(IstioMetrics)
+  connect(mapStateToProps, mapDispatchToProps)(IstioMetrics)
 );
 
 export default IstioMetricsContainer;

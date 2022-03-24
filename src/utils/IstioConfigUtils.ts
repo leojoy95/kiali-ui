@@ -1,6 +1,7 @@
 import { IstioConfigDetails } from '../types/IstioConfigDetails';
-import { IstioObject } from '../types/IstioObjects';
+import { ConnectionPoolSettings, IstioObject, ObjectCheck, OutlierDetection, StatusCondition, Validations } from '../types/IstioObjects';
 import _ from 'lodash';
+import { IstioConfigItem } from 'types/IstioConfigList';
 
 export const mergeJsonPatch = (objectModified: object, object?: object): object => {
   if (!object) {
@@ -19,7 +20,7 @@ export const mergeJsonPatch = (objectModified: object, object?: object): object 
   return objectModified;
 };
 
-export const getIstioObject = (istioObjectDetails?: IstioConfigDetails) => {
+export const getIstioObject = (istioObjectDetails?: IstioConfigDetails | IstioConfigItem) => {
   let istioObject: IstioObject | undefined;
   if (istioObjectDetails) {
     if (istioObjectDetails.gateway) {
@@ -30,34 +31,18 @@ export const getIstioObject = (istioObjectDetails?: IstioConfigDetails) => {
       istioObject = istioObjectDetails.destinationRule;
     } else if (istioObjectDetails.serviceEntry) {
       istioObject = istioObjectDetails.serviceEntry;
-    } else if (istioObjectDetails.rule) {
-      istioObject = istioObjectDetails.rule;
-    } else if (istioObjectDetails.adapter) {
-      istioObject = istioObjectDetails.adapter;
-    } else if (istioObjectDetails.template) {
-      istioObject = istioObjectDetails.template;
-    } else if (istioObjectDetails.quotaSpec) {
-      istioObject = istioObjectDetails.quotaSpec;
-    } else if (istioObjectDetails.quotaSpecBinding) {
-      istioObject = istioObjectDetails.quotaSpecBinding;
-    } else if (istioObjectDetails.policy) {
-      istioObject = istioObjectDetails.policy;
-    } else if (istioObjectDetails.meshPolicy) {
-      istioObject = istioObjectDetails.meshPolicy;
-    } else if (istioObjectDetails.serviceMeshPolicy) {
-      istioObject = istioObjectDetails.serviceMeshPolicy;
-    } else if (istioObjectDetails.clusterRbacConfig) {
-      istioObject = istioObjectDetails.clusterRbacConfig;
-    } else if (istioObjectDetails.rbacConfig) {
-      istioObject = istioObjectDetails.rbacConfig;
+    } else if (istioObjectDetails.workloadEntry) {
+      istioObject = istioObjectDetails.workloadEntry;
+    } else if (istioObjectDetails.workloadGroup) {
+      istioObject = istioObjectDetails.workloadGroup;
+    } else if (istioObjectDetails.envoyFilter) {
+      istioObject = istioObjectDetails.envoyFilter;
     } else if (istioObjectDetails.authorizationPolicy) {
       istioObject = istioObjectDetails.authorizationPolicy;
-    } else if (istioObjectDetails.serviceMeshRbacConfig) {
-      istioObject = istioObjectDetails.serviceMeshRbacConfig;
-    } else if (istioObjectDetails.serviceRole) {
-      istioObject = istioObjectDetails.serviceRole;
-    } else if (istioObjectDetails.serviceRoleBinding) {
-      istioObject = istioObjectDetails.serviceRoleBinding;
+    } else if (istioObjectDetails.peerAuthentication) {
+      istioObject = istioObjectDetails.peerAuthentication;
+    } else if (istioObjectDetails.requestAuthentication) {
+      istioObject = istioObjectDetails.requestAuthentication;
     } else if (istioObjectDetails.sidecar) {
       istioObject = istioObjectDetails.sidecar;
     }
@@ -67,9 +52,21 @@ export const getIstioObject = (istioObjectDetails?: IstioConfigDetails) => {
 
 const nsRegexp = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[-a-z0-9]([-a-z0-9]*[a-z0-9])?)*$/;
 const hostRegexp = /(?=^.{4,253}$)(^((?!-)(([a-zA-Z0-9-]{0,62}[a-zA-Z0-9])|\*)\.)+[a-zA-Z]{2,63}$)/;
+const ipRegexp = /^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))?$/;
+const durationRegexp = /^[\d]+\.?[\d]*(h|m|s|ms)$/;
+
+// Gateway hosts have namespace/dnsName with namespace optional
+export const isGatewayHostValid = (gatewayHost: string): boolean => {
+  return isServerHostValid(gatewayHost, false);
+};
+
+// Sidecar host have namespace/dnsName with both namespace/dnsName mandatory
+export const isSidecarHostValid = (sidecarHost: string): boolean => {
+  return isServerHostValid(sidecarHost, true);
+};
 
 // Used to check if Sidecar and Gateway host expressions are valid
-export const isServerHostValid = (serverHost: string): boolean => {
+export const isServerHostValid = (serverHost: string, nsMandatory: boolean): boolean => {
   if (serverHost.length === 0) {
     return false;
   }
@@ -79,6 +76,11 @@ export const isServerHostValid = (serverHost: string): boolean => {
   if (parts.length > 2) {
     return false;
   }
+  // Force that namespace/dnsName are present
+  if (nsMandatory && parts.length < 2) {
+    return false;
+  }
+
   // parts[0] is a dns
   let dnsValid = true;
   let hostValid = true;
@@ -99,4 +101,87 @@ export const isServerHostValid = (serverHost: string): boolean => {
     hostValid = host.search(hostRegexp) === 0;
   }
   return dnsValid && hostValid;
+};
+
+export const isValidIp = (ip: string): boolean => {
+  return ipRegexp.test(ip);
+};
+
+export const isValidUrl = (url: string): boolean => {
+  try {
+    new URL(url);
+  } catch (_) {
+    return false;
+  }
+  return true;
+};
+
+export const isValidDuration = (duration: string): boolean => {
+  if (duration === '0ms' || duration === '0s' || duration === '0m' || duration === '0h') {
+    return false;
+  }
+  return durationRegexp.test(duration);
+};
+
+export const isValidAbortStatusCode = (statusCode: number): boolean => {
+  return statusCode >= 100 && statusCode <= 599;
+};
+
+export const isValidConnectionPool = (connectionPool: ConnectionPoolSettings): boolean => {
+  if (connectionPool.tcp) {
+    if (connectionPool.tcp.connectTimeout && !isValidDuration(connectionPool.tcp.connectTimeout)) {
+      return false;
+    }
+    if (connectionPool.tcp.tcpKeepalive) {
+      if (connectionPool.tcp.tcpKeepalive.interval && !isValidDuration(connectionPool.tcp.tcpKeepalive.interval)) {
+        return false;
+      }
+      if (connectionPool.tcp.tcpKeepalive.time && !isValidDuration(connectionPool.tcp.tcpKeepalive.time)) {
+        return false;
+      }
+    }
+  }
+  if (connectionPool.http) {
+    if (connectionPool.http.idleTimeout && !isValidDuration(connectionPool.http.idleTimeout)) {
+      return false;
+    }
+  }
+  return true;
+};
+
+export const isValidOutlierDetection = (outlierDetection: OutlierDetection): boolean => {
+  if (outlierDetection.interval && !isValidDuration(outlierDetection.interval)) {
+    return false;
+  }
+  if (outlierDetection.baseEjectionTime && !isValidDuration(outlierDetection.baseEjectionTime)) {
+    return false;
+  }
+  return true;
+};
+
+export const hasMissingAuthPolicy = (workloadName: string, validations: Validations | undefined): boolean => {
+  let hasMissingAP = false;
+
+  if (!validations) {
+    return hasMissingAP;
+  }
+
+  if (validations['workload'] && validations['workload'][workloadName]) {
+    const workloadValidation = validations['workload'][workloadName];
+
+    workloadValidation.checks.forEach((check: ObjectCheck) => {
+      if (check.code === 'KIA1201') {
+        hasMissingAP = true;
+      }
+    });
+  }
+
+  return hasMissingAP;
+}
+
+export const getReconciliationCondition = (
+  istioConfigDetails?: IstioConfigDetails | IstioConfigItem
+): StatusCondition | undefined => {
+  const istioObject = getIstioObject(istioConfigDetails);
+  return istioObject?.status?.conditions?.find(condition => condition.type === 'Reconciled');
 };

@@ -1,4 +1,4 @@
-import { Layout, EdgeLabelMode, NodeType, NodeParamsType, GraphType } from '../../types/Graph';
+import { Layout, EdgeLabelMode, NodeType, NodeParamsType, GraphType, TrafficRate, EdgeMode } from '../../types/Graph';
 import { DurationInSeconds, IntervalInMilliseconds } from '../../types/Common';
 import Namespace from '../../types/Namespace';
 import { URLParam } from '../../app/History';
@@ -7,23 +7,33 @@ import { isKioskMode } from '../../utils/SearchParamUtils';
 export type GraphUrlParams = {
   activeNamespaces: Namespace[];
   duration: DurationInSeconds;
-  edgeLabelMode: EdgeLabelMode;
+  edgeLabels: EdgeLabelMode[];
+  edgeMode: EdgeMode;
   graphLayout: Layout;
   graphType: GraphType;
+  namespaceLayout: Layout;
   node?: NodeParamsType;
   refreshInterval: IntervalInMilliseconds;
+  showIdleEdges: boolean;
+  showIdleNodes: boolean;
+  showOperationNodes: boolean;
   showServiceNodes: boolean;
-  showUnusedNodes: boolean;
+  trafficRates: TrafficRate[];
 };
 
 const buildCommonQueryParams = (params: GraphUrlParams): string => {
-  let q = `&${URLParam.GRAPH_EDGES}=${params.edgeLabelMode}`;
+  let q = `&${URLParam.GRAPH_EDGE_LABEL}=${params.edgeLabels}`;
+  q += `&${URLParam.GRAPH_EDGE_MODE}=${params.edgeMode}`;
   q += `&${URLParam.GRAPH_LAYOUT}=${params.graphLayout.name}`;
+  q += `&${URLParam.GRAPH_NAMESPACE_LAYOUT}=${params.namespaceLayout.name}`;
+  q += `&${URLParam.GRAPH_IDLE_EDGES}=${params.showIdleEdges}`;
+  q += `&${URLParam.GRAPH_IDLE_NODES}=${params.showIdleNodes}`;
   q += `&${URLParam.GRAPH_SERVICE_NODES}=${params.showServiceNodes}`;
+  q += `&${URLParam.GRAPH_TRAFFIC}=${params.trafficRates}`;
   q += `&${URLParam.GRAPH_TYPE}=${params.graphType}`;
   q += `&${URLParam.DURATION}=${params.duration}`;
+  q += `&${URLParam.GRAPH_OPERATION_NODES}=${params.showOperationNodes}`;
   q += `&${URLParam.REFRESH_INTERVAL}=${params.refreshInterval}`;
-  q += `&${URLParam.UNUSED_NODES}=${params.showUnusedNodes}`;
   return q;
 };
 
@@ -43,6 +53,11 @@ export const makeNodeGraphUrlFromParams = (params: GraphUrlParams): string => {
   const node = params.node;
   if (node) {
     switch (node.nodeType) {
+      case NodeType.AGGREGATE:
+        return (
+          `/graph/node/namespaces/${node.namespace.name}/aggregates/${node.aggregate}/${node.aggregateValue}?` +
+          buildCommonQueryParams(params)
+        );
       case NodeType.APP:
         if (node.version && node.version !== 'unknown') {
           return (
@@ -53,13 +68,18 @@ export const makeNodeGraphUrlFromParams = (params: GraphUrlParams): string => {
         return (
           `/graph/node/namespaces/${node.namespace.name}/applications/${node.app}?` + buildCommonQueryParams(params)
         );
-      case NodeType.WORKLOAD:
+      case NodeType.BOX:
+        // can only be app box
         return (
-          `/graph/node/namespaces/${node.namespace.name}/workloads/${node.workload}?` + buildCommonQueryParams(params)
+          `/graph/node/namespaces/${node.namespace.name}/applications/${node.app}?` + buildCommonQueryParams(params)
         );
       case NodeType.SERVICE:
         return (
           `/graph/node/namespaces/${node.namespace.name}/services/${node.service}?` + buildCommonQueryParams(params)
+        );
+      case NodeType.WORKLOAD:
+        return (
+          `/graph/node/namespaces/${node.namespace.name}/workloads/${node.workload}?` + buildCommonQueryParams(params)
         );
       default:
         console.debug('makeNodeUrl defaulting to makeNamespaceUrl');

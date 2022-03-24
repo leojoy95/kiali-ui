@@ -1,9 +1,9 @@
 import * as React from 'react';
-import { Text, TextVariants, Tooltip, TooltipPosition } from '@patternfly/react-core';
+import { Tooltip, TooltipPosition } from '@patternfly/react-core';
 import { Link } from 'react-router-dom';
 import { Status } from '../../types/Health';
 import { Paths } from '../../config';
-import { ActiveFilter } from '../../types/Filters';
+import { ActiveFilter, DEFAULT_LABEL_OPERATION } from '../../types/Filters';
 import { healthFilter } from '../../components/Filters/CommonFilters';
 import { FilterSelected } from '../../components/Filters/StatefulFilters';
 import { createIcon } from '../../components/Health/Helper';
@@ -20,14 +20,14 @@ type Props = {
 
 class OverviewStatus extends React.Component<Props, {}> {
   setFilters = () => {
-    const filters: (ActiveFilter & { id: string })[] = [
+    const filters: ActiveFilter[] = [
       {
         id: healthFilter.id,
-        category: healthFilter.title,
+        title: healthFilter.title,
         value: this.props.status.name
       }
     ];
-    FilterSelected.setSelected(filters);
+    FilterSelected.setSelected({ filters: filters, op: DEFAULT_LABEL_OPERATION });
   };
 
   render() {
@@ -38,23 +38,30 @@ class OverviewStatus extends React.Component<Props, {}> {
       items.push('and ' + (length - items.length) + ' more...');
     }
     const tooltipContent = (
-      <>
-        <Text component={TextVariants.h4}>
-          <strong>{this.props.status.name}</strong>
-        </Text>
+      <div>
+        <strong>{this.props.status.name}</strong>
         {items.map((app, idx) => {
-          return <div key={this.props.id + '-' + idx}>{app}</div>;
+          return (
+            <div key={this.props.id + '-' + idx}>
+              <span style={{ marginRight: '10px' }}>{createIcon(this.props.status, 'sm')}</span> {app}
+            </div>
+          );
         })}
-      </>
+      </div>
     );
     return (
-      <Tooltip aria-label={'Overview status'} position={TooltipPosition.top} content={tooltipContent}>
-        <>
+      <Tooltip
+        aria-label={'Overview status'}
+        position={TooltipPosition.auto}
+        content={tooltipContent}
+        className={'health_indicator'}
+      >
+        <div style={{ display: 'inline-block', marginRight: '5px' }}>
           <Link to={`/${this.props.targetPage}?namespaces=${this.props.namespace}`} onClick={() => this.setFilters()}>
             {createIcon(this.props.status)}
             {' ' + length}
           </Link>{' '}
-        </>
+        </div>
       </Tooltip>
     );
   }

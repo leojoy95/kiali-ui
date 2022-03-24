@@ -8,7 +8,9 @@ export interface FilterValue {
 
 enum NonInputTypes {
   typeAhead = 'typeahead',
-  select = 'select'
+  select = 'select',
+  label = 'label',
+  nsLabel = 'nsLabel'
 }
 
 export const FilterTypes = {
@@ -29,14 +31,24 @@ export interface FilterType {
   loader?: () => Promise<FilterValue[]>;
 }
 
-export interface FilterTypeWithFilter<T> extends FilterType {
-  filter: (items: T[], filters: ActiveFilter[]) => T[];
+export interface RunnableFilter<T> extends FilterType {
+  run: (item: T, filters: ActiveFiltersInfo) => boolean;
 }
 
 export const FILTER_ACTION_APPEND = 'append';
 export const FILTER_ACTION_UPDATE = 'update';
 
 export interface ActiveFilter {
-  category: string;
+  id: string;
+  title: string;
   value: string;
+}
+
+export type LabelOperation = 'and' | 'or';
+export const ID_LABEL_OPERATION = 'opLabel';
+export const DEFAULT_LABEL_OPERATION: LabelOperation = 'or';
+
+export interface ActiveFiltersInfo {
+  filters: ActiveFilter[];
+  op: LabelOperation;
 }

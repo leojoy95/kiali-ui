@@ -1,25 +1,37 @@
-import { ServiceHealth } from './Health';
+import { DEGRADED, FAILURE, HEALTHY, NA, ServiceHealth, Status } from './Health';
 import {
-  DestinationRules,
+  DestinationRule,
   ObjectCheck,
   ObjectValidation,
-  Port,
+  ServiceEntry,
   Validations,
   ValidationTypes,
-  VirtualServices
+  VirtualService
 } from './IstioObjects';
 import { TLSStatus } from './TLSStatus';
 import { AdditionalItem } from './Workload';
+import { ResourcePermissions } from './Permissions';
+
+export interface ServicePort {
+  name: string;
+  port: number;
+  protocol: string;
+  appProtocol?: string;
+  istioProtocol: string;
+  tlsMode: string;
+}
 
 export interface Endpoints {
   addresses?: EndpointAddress[];
-  ports?: Port[];
+  ports?: ServicePort[];
 }
 
 interface EndpointAddress {
   ip: string;
   kind?: string;
   name?: string;
+  istioProtocol?: string;
+  tlsMode?: string;
 }
 
 export interface WorkloadOverview {
@@ -29,6 +41,7 @@ export interface WorkloadOverview {
   labels?: { [key: string]: string };
   resourceVersion: string;
   createdAt: string;
+  serviceAccountNames: string[];
 }
 
 export interface Service {
@@ -37,7 +50,7 @@ export interface Service {
   createdAt: string;
   resourceVersion: string;
   ip: string;
-  ports?: Port[];
+  ports?: ServicePort[];
   externalName: string;
   labels?: { [key: string]: string };
   selectors?: { [key: string]: string };
@@ -47,8 +60,10 @@ export interface ServiceDetailsInfo {
   service: Service;
   endpoints?: Endpoints[];
   istioSidecar: boolean;
-  virtualServices: VirtualServices;
-  destinationRules: DestinationRules;
+  virtualServices: VirtualService[];
+  destinationRules: DestinationRule[];
+  serviceEntries: ServiceEntry[];
+  istioPermissions: ResourcePermissions;
   health?: ServiceHealth;
   workloads?: WorkloadOverview[];
   namespaceMTLS?: TLSStatus;
@@ -81,20 +96,25 @@ export const highestSeverity = (checks: ObjectCheck[]): ValidationTypes => {
   return severity;
 };
 
+export const validationToHealth = (severity: ValidationTypes): Status => {
+  let status: Status = NA;
+  if (severity === ValidationTypes.Correct) {
+    status = HEALTHY;
+  } else if (severity === ValidationTypes.Warning) {
+    status = DEGRADED;
+  } else if (severity === ValidationTypes.Error) {
+    status = FAILURE;
+  }
+  return status;
+};
+
 const numberOfChecks = (type: ValidationTypes, object: ObjectValidation) =>
   (object && object.checks ? object.checks : []).filter(i => i.severity === type).length;
 
 export const validationToSeverity = (object: ObjectValidation): ValidationTypes => {
   const warnChecks = numberOfChecks(ValidationTypes.Warning, object);
   const errChecks = numberOfChecks(ValidationTypes.Error, object);
-
-  return object && object.valid
-    ? ValidationTypes.Correct
-    : object && !object.valid && errChecks > 0
-    ? ValidationTypes.Error
-    : object && !object.valid && warnChecks > 0
-    ? ValidationTypes.Warning
-    : ValidationTypes.Correct;
+  return errChecks > 0 ? ValidationTypes.Error : warnChecks > 0 ? ValidationTypes.Warning : ValidationTypes.Correct;
 };
 
 export const checkForPath = (object: ObjectValidation | undefined, path: string): ObjectCheck[] => {

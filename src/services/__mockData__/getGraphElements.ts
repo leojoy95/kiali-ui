@@ -1,4 +1,4 @@
-import { PfColors } from '../../components/Pf/PfColors';
+import { PFColors } from '../../components/Pf/PfColors';
 import { NodeType } from '../../types/Graph';
 
 export const TEST = {
@@ -10,6 +10,7 @@ export const TEST = {
           text: 'details (v1)',
           service: 'details.istio-system.svc.cluster.local',
           version: 'v1',
+          cluster: `cluster-1`,
           namespace: 'istio-system',
           nodeType: NodeType.APP
         }
@@ -20,6 +21,7 @@ export const TEST = {
           text: 'productpage (v1)',
           service: 'productpage.istio-system.svc.cluster.local',
           version: 'v1',
+          cluster: `cluster-1`,
           namespace: 'istio-system',
           nodeType: NodeType.APP
         }
@@ -30,6 +32,7 @@ export const TEST = {
           text: 'reviews (v1)',
           service: 'reviews.istio-system.svc.cluster.local',
           version: 'v1',
+          cluster: `cluster-1`,
           namespace: 'istio-system',
           nodeType: NodeType.APP
         }
@@ -40,6 +43,7 @@ export const TEST = {
           text: 'unknown',
           service: 'unknown',
           version: 'unknown',
+          cluster: `cluster-1`,
           namespace: 'istio-system',
           nodeType: NodeType.APP
         }
@@ -52,7 +56,7 @@ export const TEST = {
           source: 'n0',
           target: 'n1',
           text: '12.54pm',
-          color: PfColors.Green400
+          color: PFColors.Success
         }
       },
       {
@@ -61,7 +65,7 @@ export const TEST = {
           source: 'n1',
           target: 'n2',
           text: '12.54pm',
-          color: PfColors.Green400
+          color: PFColors.Success
         }
       },
       {
@@ -70,7 +74,7 @@ export const TEST = {
           source: 'n1',
           target: 'n3',
           text: '12.54pm',
-          color: PfColors.Green400
+          color: PFColors.Success
         }
       }
     ]
@@ -86,6 +90,7 @@ export const ISTIO_SYSTEM = {
           text: 'details (v1)',
           service: 'details.istio-system.svc.cluster.local',
           version: 'v1',
+          cluster: `cluster-1`,
           namespace: 'istio-system',
           nodeType: NodeType.APP
         }
@@ -96,6 +101,7 @@ export const ISTIO_SYSTEM = {
           text: 'productpage (v1)',
           service: 'productpage.istio-system.svc.cluster.local',
           version: 'v1',
+          cluster: `cluster-1`,
           namespace: 'istio-system',
           nodeType: NodeType.APP
         }
@@ -106,6 +112,7 @@ export const ISTIO_SYSTEM = {
           text: 'ratings (v1)',
           service: 'ratings.istio-system.svc.cluster.local',
           version: 'v1',
+          cluster: `cluster-1`,
           namespace: 'istio-system',
           nodeType: NodeType.APP
         }
@@ -115,6 +122,7 @@ export const ISTIO_SYSTEM = {
           id: 'n7',
           text: 'reviews',
           service: 'reviews.istio-system.svc.cluster.local',
+          cluster: `cluster-1`,
           namespace: 'istio-system',
           nodeType: NodeType.APP
         }
@@ -126,6 +134,7 @@ export const ISTIO_SYSTEM = {
           parent: 'n7',
           service: 'reviews.istio-system.svc.cluster.local',
           version: 'v1',
+          cluster: `cluster-1`,
           namespace: 'istio-system',
           nodeType: NodeType.APP
         }
@@ -137,6 +146,7 @@ export const ISTIO_SYSTEM = {
           parent: 'n7',
           service: 'reviews.istio-system.svc.cluster.local',
           version: 'v2',
+          cluster: `cluster-1`,
           namespace: 'istio-system',
           nodeType: NodeType.APP
         }
@@ -148,6 +158,7 @@ export const ISTIO_SYSTEM = {
           parent: 'n7',
           service: 'reviews.istio-system.svc.cluster.local',
           version: 'v3',
+          cluster: `cluster-1`,
           namespace: 'istio-system',
           nodeType: NodeType.APP
         }
@@ -158,6 +169,7 @@ export const ISTIO_SYSTEM = {
           text: 'unknown',
           service: 'unknown',
           version: 'unknown',
+          cluster: `cluster-1`,
           namespace: 'istio-system',
           nodeType: NodeType.APP
         }
@@ -170,7 +182,7 @@ export const ISTIO_SYSTEM = {
           source: 'n0',
           target: 'n1',
           text: '0ps',
-          color: PfColors.Black
+          color: PFColors.Black1000
         }
       },
       {
@@ -179,7 +191,7 @@ export const ISTIO_SYSTEM = {
           source: 'n1',
           target: 'n2',
           text: '0ps',
-          color: PfColors.Black
+          color: PFColors.Black1000
         }
       },
       {
@@ -188,7 +200,7 @@ export const ISTIO_SYSTEM = {
           source: 'n1',
           target: 'n3',
           text: '0ps',
-          color: PfColors.Black
+          color: PFColors.Black1000
         }
       },
       {
@@ -197,7 +209,7 @@ export const ISTIO_SYSTEM = {
           source: 'n1',
           target: 'n4',
           text: '0ps',
-          color: PfColors.Black
+          color: PFColors.Black1000
         }
       },
       {
@@ -206,7 +218,7 @@ export const ISTIO_SYSTEM = {
           source: 'n1',
           target: 'n6',
           text: '0ps',
-          color: PfColors.Black
+          color: PFColors.Black1000
         }
       },
       {
@@ -215,7 +227,7 @@ export const ISTIO_SYSTEM = {
           source: 'n4',
           target: 'n5',
           text: '0ps',
-          color: PfColors.Black
+          color: PFColors.Black1000
         }
       },
       {
@@ -224,7 +236,7 @@ export const ISTIO_SYSTEM = {
           source: 'n6',
           target: 'n5',
           text: '0ps',
-          color: PfColors.Black
+          color: PFColors.Black1000
         }
       }
     ]

@@ -1,27 +1,30 @@
 import * as React from 'react';
 import { style } from 'typestyle';
 import { InfoAltIcon, SquareFullIcon } from '@patternfly/react-icons';
-import { SparklineChart, VCLines, VCLine, VCDataPoint } from '@kiali/k-charted-pf4';
 
-import { PfColors, PFAlertColor } from '../Pf/PfColors';
+import { SparklineChart } from 'components/Charts/SparklineChart';
+import { PFColors } from '../Pf/PfColors';
 import { SUMMARY_PANEL_CHART_WIDTH } from '../../types/Graph';
 import { Datapoint } from '../../types/Metrics';
-import Graphing from 'utils/Graphing';
+import { toVCLine } from 'utils/VictoryChartsUtils';
+import { RichDataPoint, VCDataPoint, VCLine, VCLines } from 'types/VictoryChartInfo';
 
 import 'components/Charts/Charts.css';
+import { summaryTitle } from 'pages/Graph/SummaryPanelCommon';
 
-type RpsChartTypeProp = {
+type RequestChartProp = {
   label: string;
   dataRps: Datapoint[];
   dataErrors: Datapoint[];
   hide?: boolean;
 };
 
-type TcpChartTypeProp = {
-  label: string;
-  sentRates: Datapoint[];
-  receivedRates: Datapoint[];
+type StreamChartProp = {
   hide?: boolean;
+  label: string;
+  receivedRates: Datapoint[];
+  sentRates: Datapoint[];
+  unit: 'bytes' | 'messages';
 };
 
 type BytesAbbreviation = {
@@ -45,34 +48,32 @@ const renderNoTrafficLegend = () => {
   );
 };
 
-const thereIsTrafficData = (seriesData: VCLine) => {
+const thereIsTrafficData = (seriesData: VCLine<RichDataPoint>) => {
   return seriesData.datapoints.reduce((accum, val) => accum + val.y, 0) > 0;
 };
 
-const renderSparklines = (series: VCLines, yTickFormat?: (val: number) => string) => {
-  const yFormat = yTickFormat ? yTickFormat : y => y;
+const renderSparklines = (series: VCLines<RichDataPoint>, yTickFormat?: (val: number) => string) => {
+  const yFormat = yTickFormat ? yTickFormat : y => `${y} rps`;
   return (
     <SparklineChart
-      name={'rps'}
+      name="rps"
       height={41}
       width={SUMMARY_PANEL_CHART_WIDTH}
       showLegend={false}
       padding={{ top: 5 }}
-      tooltipFormat={dp => `${(dp.x as Date).toLocaleTimeString()}\n${yFormat(dp.y)} RPS`}
+      tooltipFormat={dp => `${(dp.x as Date).toLocaleTimeString()}\n${yFormat(dp.y)}`}
       series={series}
     />
   );
 };
 
-export class RpsChart extends React.Component<RpsChartTypeProp, {}> {
+export class RequestChart extends React.Component<RequestChartProp, {}> {
   render() {
     return (
       <>
         {!this.props.hide && (
           <div className={blockStyle}>
-            <div>
-              <strong>{this.props.label} min / max:</strong>
-            </div>
+            <div className={summaryTitle}>{this.props.label} min / max:</div>
             {this.renderContent()}
           </div>
         )}
@@ -81,8 +82,8 @@ export class RpsChart extends React.Component<RpsChartTypeProp, {}> {
   }
 
   private renderContent = () => {
-    const rpsLine = Graphing.toVCLine(this.props.dataRps, 'RPS', PFAlertColor.Info);
-    const errLine = Graphing.toVCLine(this.props.dataErrors, 'Error', PFAlertColor.Danger);
+    const rpsLine = toVCLine(this.props.dataRps, 'RPS', PFColors.Info);
+    const errLine = toVCLine(this.props.dataErrors, 'Error', PFColors.Danger);
     if (thereIsTrafficData(rpsLine)) {
       return (
         <>
@@ -125,15 +126,13 @@ export class RpsChart extends React.Component<RpsChartTypeProp, {}> {
   };
 }
 
-export class TcpChart extends React.Component<TcpChartTypeProp, {}> {
+export class StreamChart extends React.Component<StreamChartProp, {}> {
   render() {
     return (
       <>
         {!this.props.hide && (
           <div className={blockStyle}>
-            <div>
-              <strong>{this.props.label} - min / max:</strong>
-            </div>
+            <div className={summaryTitle}>{this.props.label} min / max:</div>
             {this.renderContent()}
           </div>
         )}
@@ -142,14 +141,19 @@ export class TcpChart extends React.Component<TcpChartTypeProp, {}> {
   }
 
   private renderContent = () => {
-    const sentLine = Graphing.toVCLine(this.props.sentRates, 'Sent', PfColors.Blue);
-    const receivedLine = Graphing.toVCLine(this.props.receivedRates, 'Received', PfColors.Green);
+    const sentLine = toVCLine(this.props.sentRates, 'Sent', PFColors.Blue400);
+    const receivedLine = toVCLine(this.props.receivedRates, 'Received', PFColors.Green400);
     if (thereIsTrafficData(sentLine) || thereIsTrafficData(receivedLine)) {
       return (
         <>
-          {this.renderMinMaxStats(sentLine.datapoints.map(dp => dp.y), receivedLine.datapoints.map(dp => dp.y))}
+          {this.renderMinMaxStats(
+            sentLine.datapoints.map(dp => dp.y),
+            receivedLine.datapoints.map(dp => dp.y)
+          )}
           {renderSparklines([sentLine, receivedLine], val => {
-            return this.abbreviateBytes(val).format(true) + '/s';
+            return this.props.unit === 'bytes'
+              ? this.abbreviateBytes(val).format(true) + '/s'
+              : `${val.toFixed(2)} msg/s`;
           })}
         </>
       );
@@ -175,9 +179,9 @@ export class TcpChart extends React.Component<TcpChartTypeProp, {}> {
 
     return (
       <div>
-        <SquareFullIcon style={{ color: PfColors.Blue }} /> Sent: {this.formatMinMaxStats(minSent, maxSent)}
+        <SquareFullIcon style={{ color: PFColors.Blue400 }} /> Sent: {this.formatMinMaxStats(minSent, maxSent)}
         <br />
-        <SquareFullIcon style={{ color: PfColors.Green }} /> Received:{' '}
+        <SquareFullIcon style={{ color: PFColors.Green400 }} /> Received:{' '}
         {this.formatMinMaxStats(minReceived, maxReceived)}
       </div>
     );
@@ -215,17 +219,21 @@ export class TcpChart extends React.Component<TcpChartTypeProp, {}> {
   };
 
   private formatMinMaxStats = (min: number, max: number): string => {
-    const minAbbr = this.abbreviateBytes(min);
-    const maxAbbr = this.abbreviateBytes(max);
+    if (this.props.unit === 'bytes') {
+      const minAbbr = this.abbreviateBytes(min);
+      const maxAbbr = this.abbreviateBytes(max);
 
-    if (minAbbr.multiplier > maxAbbr.multiplier) {
-      maxAbbr.unit = minAbbr.unit;
-      maxAbbr.multiplier = minAbbr.multiplier;
-    } else {
-      minAbbr.unit = maxAbbr.unit;
-      minAbbr.multiplier = maxAbbr.multiplier;
+      if (minAbbr.multiplier > maxAbbr.multiplier) {
+        maxAbbr.unit = minAbbr.unit;
+        maxAbbr.multiplier = minAbbr.multiplier;
+      } else {
+        minAbbr.unit = maxAbbr.unit;
+        minAbbr.multiplier = maxAbbr.multiplier;
+      }
+
+      return minAbbr.format(false) + ' / ' + maxAbbr.format(true) + '/s';
     }
 
-    return minAbbr.format(false) + ' / ' + maxAbbr.format(true) + '/s';
+    return min.toFixed(2) + ' / ' + max.toFixed(2) + ' msg/s';
   };
 }

@@ -3,7 +3,7 @@
 exports[`ToolbarDropdown Render correctly all dropdowns 1`] = `
 <Fragment>
   <Text
-    className="ff3k5ad"
+    className="f1ldye9z"
     component="h5"
   >
     graph_filter_interval_duration
@@ -17,7 +17,7 @@ exports[`ToolbarDropdown Render correctly all dropdowns 1`] = `
     isExpanded={false}
     onSelect={[Function]}
     onToggle={[Function]}
-    placeholderText="1m Traffic"
+    placeholderText="1m"
     selections={60}
   >
     <SelectOption
@@ -27,6 +27,7 @@ exports[`ToolbarDropdown Render correctly all dropdowns 1`] = `
       isChecked={false}
       isDisabled={false}
       isFocused={false}
+      isNoResultsOption={false}
       isPlaceholder={false}
       isSelected={true}
       key="60"
@@ -35,7 +36,7 @@ exports[`ToolbarDropdown Render correctly all dropdowns 1`] = `
       sendRef={[Function]}
       value="60"
     >
-      1m Traffic
+      1m
     </SelectOption>
     <SelectOption
       className=""
@@ -44,6 +45,7 @@ exports[`ToolbarDropdown Render correctly all dropdowns 1`] = `
       isChecked={false}
       isDisabled={false}
       isFocused={false}
+      isNoResultsOption={false}
       isPlaceholder={false}
       isSelected={false}
       key="300"
@@ -52,7 +54,7 @@ exports[`ToolbarDropdown Render correctly all dropdowns 1`] = `
       sendRef={[Function]}
       value="300"
     >
-      5m Traffic
+      5m
     </SelectOption>
     <SelectOption
       className=""
@@ -61,6 +63,7 @@ exports[`ToolbarDropdown Render correctly all dropdowns 1`] = `
       isChecked={false}
       isDisabled={false}
       isFocused={false}
+      isNoResultsOption={false}
       isPlaceholder={false}
       isSelected={false}
       key="600"
@@ -69,7 +72,7 @@ exports[`ToolbarDropdown Render correctly all dropdowns 1`] = `
       sendRef={[Function]}
       value="600"
     >
-      10m Traffic
+      10m
     </SelectOption>
     <SelectOption
       className=""
@@ -78,6 +81,7 @@ exports[`ToolbarDropdown Render correctly all dropdowns 1`] = `
       isChecked={false}
       isDisabled={false}
       isFocused={false}
+      isNoResultsOption={false}
       isPlaceholder={false}
       isSelected={false}
       key="1800"
@@ -86,7 +90,7 @@ exports[`ToolbarDropdown Render correctly all dropdowns 1`] = `
       sendRef={[Function]}
       value="1800"
     >
-      30m Traffic
+      30m
     </SelectOption>
     <SelectOption
       className=""
@@ -95,6 +99,7 @@ exports[`ToolbarDropdown Render correctly all dropdowns 1`] = `
       isChecked={false}
       isDisabled={false}
       isFocused={false}
+      isNoResultsOption={false}
       isPlaceholder={false}
       isSelected={false}
       key="3600"
@@ -103,7 +108,7 @@ exports[`ToolbarDropdown Render correctly all dropdowns 1`] = `
       sendRef={[Function]}
       value="3600"
     >
-      1h Traffic
+      1h
     </SelectOption>
     <SelectOption
       className=""
@@ -112,6 +117,7 @@ exports[`ToolbarDropdown Render correctly all dropdowns 1`] = `
       isChecked={false}
       isDisabled={false}
       isFocused={false}
+      isNoResultsOption={false}
       isPlaceholder={false}
       isSelected={false}
       key="10800"
@@ -120,7 +126,7 @@ exports[`ToolbarDropdown Render correctly all dropdowns 1`] = `
       sendRef={[Function]}
       value="10800"
     >
-      3h Traffic
+      3h
     </SelectOption>
     <SelectOption
       className=""
@@ -129,6 +135,7 @@ exports[`ToolbarDropdown Render correctly all dropdowns 1`] = `
       isChecked={false}
       isDisabled={false}
       isFocused={false}
+      isNoResultsOption={false}
       isPlaceholder={false}
       isSelected={false}
       key="21600"
@@ -137,7 +144,7 @@ exports[`ToolbarDropdown Render correctly all dropdowns 1`] = `
       sendRef={[Function]}
       value="21600"
     >
-      6h Traffic
+      6h
     </SelectOption>
   </Component>
 </Fragment>
@@ -146,7 +153,7 @@ exports[`ToolbarDropdown Render correctly all dropdowns 1`] = `
 exports[`ToolbarDropdown Render correctly all dropdowns 2`] = `
 <Fragment>
   <Text
-    className="ff3k5ad"
+    className="f1ldye9z"
     component="h5"
   >
     metrics_filter_poll_interval
@@ -170,6 +177,7 @@ exports[`ToolbarDropdown Render correctly all dropdowns 2`] = `
       isChecked={false}
       isDisabled={false}
       isFocused={false}
+      isNoResultsOption={false}
       isPlaceholder={false}
       isSelected={false}
       key="0"
@@ -187,6 +195,7 @@ exports[`ToolbarDropdown Render correctly all dropdowns 2`] = `
       isChecked={false}
       isDisabled={false}
       isFocused={false}
+      isNoResultsOption={false}
       isPlaceholder={false}
       isSelected={false}
       key="10000"
@@ -204,6 +213,7 @@ exports[`ToolbarDropdown Render correctly all dropdowns 2`] = `
       isChecked={false}
       isDisabled={false}
       isFocused={false}
+      isNoResultsOption={false}
       isPlaceholder={false}
       isSelected={true}
       key="15000"
@@ -221,6 +231,7 @@ exports[`ToolbarDropdown Render correctly all dropdowns 2`] = `
       isChecked={false}
       isDisabled={false}
       isFocused={false}
+      isNoResultsOption={false}
       isPlaceholder={false}
       isSelected={false}
       key="30000"
@@ -238,6 +249,7 @@ exports[`ToolbarDropdown Render correctly all dropdowns 2`] = `
       isChecked={false}
       isDisabled={false}
       isFocused={false}
+      isNoResultsOption={false}
       isPlaceholder={false}
       isSelected={false}
       key="60000"
@@ -255,6 +267,7 @@ exports[`ToolbarDropdown Render correctly all dropdowns 2`] = `
       isChecked={false}
       isDisabled={false}
       isFocused={false}
+      isNoResultsOption={false}
       isPlaceholder={false}
       isSelected={false}
       key="300000"
@@ -272,6 +285,7 @@ exports[`ToolbarDropdown Render correctly all dropdowns 2`] = `
       isChecked={false}
       isDisabled={false}
       isFocused={false}
+      isNoResultsOption={false}
       isPlaceholder={false}
       isSelected={false}
       key="900000"
@@ -289,7 +303,7 @@ exports[`ToolbarDropdown Render correctly all dropdowns 2`] = `
 exports[`ToolbarDropdown Render correctly all dropdowns 3`] = `
 <Fragment>
   <Text
-    className="ff3k5ad"
+    className="f1ldye9z"
     component="h5"
   >
     graph_filter_layouts
@@ -303,7 +317,6 @@ exports[`ToolbarDropdown Render correctly all dropdowns 3`] = `
     isExpanded={false}
     onSelect={[Function]}
     onToggle={[Function]}
-    placeholderText="Cola"
     selections="cola"
   >
     <SelectOption
@@ -313,15 +326,16 @@ exports[`ToolbarDropdown Render correctly all dropdowns 3`] = `
       isChecked={false}
       isDisabled={false}
       isFocused={false}
+      isNoResultsOption={false}
       isPlaceholder={false}
-      isSelected={true}
-      key="cola"
+      isSelected={false}
+      key="kiali-grid"
       keyHandler={[Function]}
       onClick={[Function]}
       sendRef={[Function]}
-      value="cola"
+      value="kiali-grid"
     >
-      Cola
+      Grid
     </SelectOption>
     <SelectOption
       className=""
@@ -330,15 +344,16 @@ exports[`ToolbarDropdown Render correctly all dropdowns 3`] = `
       isChecked={false}
       isDisabled={false}
       isFocused={false}
+      isNoResultsOption={false}
       isPlaceholder={false}
       isSelected={false}
-      key="cose-bilkent"
+      key="kiali-concentric"
       keyHandler={[Function]}
       onClick={[Function]}
       sendRef={[Function]}
-      value="cose-bilkent"
+      value="kiali-concentric"
     >
-      Cose
+      Concentric
     </SelectOption>
     <SelectOption
       className=""
@@ -347,13 +362,14 @@ exports[`ToolbarDropdown Render correctly all dropdowns 3`] = `
       isChecked={false}
       isDisabled={false}
       isFocused={false}
+      isNoResultsOption={false}
       isPlaceholder={false}
       isSelected={false}
-      key="dagre"
+      key="kiali-dagre"
       keyHandler={[Function]}
       onClick={[Function]}
       sendRef={[Function]}
-      value="dagre"
+      value="kiali-dagre"
     >
       Dagre
     </SelectOption>
@@ -364,7 +380,7 @@ exports[`ToolbarDropdown Render correctly all dropdowns 3`] = `
 exports[`ToolbarDropdown Render dropdowns correctly with controlled values and labels 1`] = `
 <Fragment>
   <Text
-    className="ff3k5ad"
+    className="f1ldye9z"
     component="h5"
   >
     graph_filter_interval_duration
@@ -378,7 +394,7 @@ exports[`ToolbarDropdown Render dropdowns correctly with controlled values and l
     isExpanded={false}
     onSelect={[Function]}
     onToggle={[Function]}
-    placeholderText="1m Traffic"
+    placeholderText="1m"
     selections={60}
   >
     <SelectOption
@@ -388,6 +404,7 @@ exports[`ToolbarDropdown Render dropdowns correctly with controlled values and l
       isChecked={false}
       isDisabled={false}
       isFocused={false}
+      isNoResultsOption={false}
       isPlaceholder={false}
       isSelected={true}
       key="60"
@@ -396,7 +413,7 @@ exports[`ToolbarDropdown Render dropdowns correctly with controlled values and l
       sendRef={[Function]}
       value="60"
     >
-      1m Traffic
+      1m
     </SelectOption>
     <SelectOption
       className=""
@@ -405,6 +422,7 @@ exports[`ToolbarDropdown Render dropdowns correctly with controlled values and l
       isChecked={false}
       isDisabled={false}
       isFocused={false}
+      isNoResultsOption={false}
       isPlaceholder={false}
       isSelected={false}
       key="300"
@@ -413,7 +431,7 @@ exports[`ToolbarDropdown Render dropdowns correctly with controlled values and l
       sendRef={[Function]}
       value="300"
     >
-      5m Traffic
+      5m
     </SelectOption>
     <SelectOption
       className=""
@@ -422,6 +440,7 @@ exports[`ToolbarDropdown Render dropdowns correctly with controlled values and l
       isChecked={false}
       isDisabled={false}
       isFocused={false}
+      isNoResultsOption={false}
       isPlaceholder={false}
       isSelected={false}
       key="600"
@@ -430,7 +449,7 @@ exports[`ToolbarDropdown Render dropdowns correctly with controlled values and l
       sendRef={[Function]}
       value="600"
     >
-      10m Traffic
+      10m
     </SelectOption>
     <SelectOption
       className=""
@@ -439,6 +458,7 @@ exports[`ToolbarDropdown Render dropdowns correctly with controlled values and l
       isChecked={false}
       isDisabled={false}
       isFocused={false}
+      isNoResultsOption={false}
       isPlaceholder={false}
       isSelected={false}
       key="1800"
@@ -447,7 +467,7 @@ exports[`ToolbarDropdown Render dropdowns correctly with controlled values and l
       sendRef={[Function]}
       value="1800"
     >
-      30m Traffic
+      30m
     </SelectOption>
     <SelectOption
       className=""
@@ -456,6 +476,7 @@ exports[`ToolbarDropdown Render dropdowns correctly with controlled values and l
       isChecked={false}
       isDisabled={false}
       isFocused={false}
+      isNoResultsOption={false}
       isPlaceholder={false}
       isSelected={false}
       key="3600"
@@ -464,7 +485,7 @@ exports[`ToolbarDropdown Render dropdowns correctly with controlled values and l
       sendRef={[Function]}
       value="3600"
     >
-      1h Traffic
+      1h
     </SelectOption>
     <SelectOption
       className=""
@@ -473,6 +494,7 @@ exports[`ToolbarDropdown Render dropdowns correctly with controlled values and l
       isChecked={false}
       isDisabled={false}
       isFocused={false}
+      isNoResultsOption={false}
       isPlaceholder={false}
       isSelected={false}
       key="10800"
@@ -481,7 +503,7 @@ exports[`ToolbarDropdown Render dropdowns correctly with controlled values and l
       sendRef={[Function]}
       value="10800"
     >
-      3h Traffic
+      3h
     </SelectOption>
     <SelectOption
       className=""
@@ -490,6 +512,7 @@ exports[`ToolbarDropdown Render dropdowns correctly with controlled values and l
       isChecked={false}
       isDisabled={false}
       isFocused={false}
+      isNoResultsOption={false}
       isPlaceholder={false}
       isSelected={false}
       key="21600"
@@ -498,7 +521,7 @@ exports[`ToolbarDropdown Render dropdowns correctly with controlled values and l
       sendRef={[Function]}
       value="21600"
     >
-      6h Traffic
+      6h
     </SelectOption>
   </Component>
 </Fragment>
@@ -507,7 +530,7 @@ exports[`ToolbarDropdown Render dropdowns correctly with controlled values and l
 exports[`ToolbarDropdown Render dropdowns correctly with controlled values and labels 2`] = `
 <Fragment>
   <Text
-    className="ff3k5ad"
+    className="f1ldye9z"
     component="h5"
   >
     metrics_filter_poll_interval
@@ -531,6 +554,7 @@ exports[`ToolbarDropdown Render dropdowns correctly with controlled values and l
       isChecked={false}
       isDisabled={false}
       isFocused={false}
+      isNoResultsOption={false}
       isPlaceholder={false}
       isSelected={false}
       key="0"
@@ -548,6 +572,7 @@ exports[`ToolbarDropdown Render dropdowns correctly with controlled values and l
       isChecked={false}
       isDisabled={false}
       isFocused={false}
+      isNoResultsOption={false}
       isPlaceholder={false}
       isSelected={false}
       key="10000"
@@ -565,6 +590,7 @@ exports[`ToolbarDropdown Render dropdowns correctly with controlled values and l
       isChecked={false}
       isDisabled={false}
       isFocused={false}
+      isNoResultsOption={false}
       isPlaceholder={false}
       isSelected={true}
       key="15000"
@@ -582,6 +608,7 @@ exports[`ToolbarDropdown Render dropdowns correctly with controlled values and l
       isChecked={false}
       isDisabled={false}
       isFocused={false}
+      isNoResultsOption={false}
       isPlaceholder={false}
       isSelected={false}
       key="30000"
@@ -599,6 +626,7 @@ exports[`ToolbarDropdown Render dropdowns correctly with controlled values and l
       isChecked={false}
       isDisabled={false}
       isFocused={false}
+      isNoResultsOption={false}
       isPlaceholder={false}
       isSelected={false}
       key="60000"
@@ -616,6 +644,7 @@ exports[`ToolbarDropdown Render dropdowns correctly with controlled values and l
       isChecked={false}
       isDisabled={false}
       isFocused={false}
+      isNoResultsOption={false}
       isPlaceholder={false}
       isSelected={false}
       key="300000"
@@ -633,6 +662,7 @@ exports[`ToolbarDropdown Render dropdowns correctly with controlled values and l
       isChecked={false}
       isDisabled={false}
       isFocused={false}
+      isNoResultsOption={false}
       isPlaceholder={false}
       isSelected={false}
       key="900000"
@@ -650,7 +680,7 @@ exports[`ToolbarDropdown Render dropdowns correctly with controlled values and l
 exports[`ToolbarDropdown Render dropdowns correctly with controlled values and labels 3`] = `
 <Fragment>
   <Text
-    className="ff3k5ad"
+    className="f1ldye9z"
     component="h5"
   >
     graph_filter_layouts
@@ -664,7 +694,6 @@ exports[`ToolbarDropdown Render dropdowns correctly with controlled values and l
     isExpanded={false}
     onSelect={[Function]}
     onToggle={[Function]}
-    placeholderText="Cola"
     selections="cola"
   >
     <SelectOption
@@ -674,15 +703,16 @@ exports[`ToolbarDropdown Render dropdowns correctly with controlled values and l
       isChecked={false}
       isDisabled={false}
       isFocused={false}
+      isNoResultsOption={false}
       isPlaceholder={false}
-      isSelected={true}
-      key="cola"
+      isSelected={false}
+      key="kiali-grid"
       keyHandler={[Function]}
       onClick={[Function]}
       sendRef={[Function]}
-      value="cola"
+      value="kiali-grid"
     >
-      Cola
+      Grid
     </SelectOption>
     <SelectOption
       className=""
@@ -691,15 +721,16 @@ exports[`ToolbarDropdown Render dropdowns correctly with controlled values and l
       isChecked={false}
       isDisabled={false}
       isFocused={false}
+      isNoResultsOption={false}
       isPlaceholder={false}
       isSelected={false}
-      key="cose-bilkent"
+      key="kiali-concentric"
       keyHandler={[Function]}
       onClick={[Function]}
       sendRef={[Function]}
-      value="cose-bilkent"
+      value="kiali-concentric"
     >
-      Cose
+      Concentric
     </SelectOption>
     <SelectOption
       className=""
@@ -708,13 +739,14 @@ exports[`ToolbarDropdown Render dropdowns correctly with controlled values and l
       isChecked={false}
       isDisabled={false}
       isFocused={false}
+      isNoResultsOption={false}
       isPlaceholder={false}
       isSelected={false}
-      key="dagre"
+      key="kiali-dagre"
       keyHandler={[Function]}
       onClick={[Function]}
       sendRef={[Function]}
-      value="dagre"
+      value="kiali-dagre"
     >
       Dagre
     </SelectOption>

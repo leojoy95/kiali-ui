@@ -6,6 +6,7 @@ import { LoginSession } from '../store/Store';
 import { KialiDispatch } from '../types/Redux';
 import InitializingScreen from './InitializingScreen';
 import authenticationConfig from '../config/AuthenticationConfig';
+import { setPFColorVals } from 'components/Pf/PfColors';
 
 interface InitializerComponentProps {
   setInitialAuthentication: (session: LoginSession) => void;
@@ -25,6 +26,7 @@ class InitializerComponent extends React.Component<InitializerComponentProps, In
 
   componentDidMount() {
     this.fetchAuthenticationConfig();
+    setPFColorVals(document.documentElement);
   }
 
   render() {
@@ -37,7 +39,6 @@ class InitializerComponent extends React.Component<InitializerComponentProps, In
       authenticationConfig.authorizationEndpoint = authConfig.data.authorizationEndpoint;
       authenticationConfig.logoutEndpoint = authConfig.data.logoutEndpoint;
       authenticationConfig.logoutRedirect = authConfig.data.logoutRedirect;
-      authenticationConfig.secretMissing = authConfig.data.secretMissing;
       authenticationConfig.strategy = authConfig.data.strategy;
 
       if (authConfig.data.sessionInfo.expiresOn && authConfig.data.sessionInfo.username) {
@@ -69,8 +70,5 @@ const mapDispatchToProps = (dispatch: KialiDispatch) => ({
   setInitialAuthentication: (session: LoginSession) => dispatch(LoginActions.loginSuccess(session))
 });
 
-const StartupInitializer = connect(
-  null,
-  mapDispatchToProps
-)(InitializerComponent);
+const StartupInitializer = connect(null, mapDispatchToProps)(InitializerComponent);
 export default StartupInitializer;

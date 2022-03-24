@@ -1,26 +1,18 @@
 import Namespace from './Namespace';
 import {
   AuthorizationPolicy,
-  ClusterRbacConfig,
   DestinationRule,
-  DestinationRules,
+  EnvoyFilter,
   Gateway,
-  IstioAdapter,
-  IstioRule,
-  IstioTemplate,
   ObjectValidation,
-  Policy,
-  QuotaSpec,
-  QuotaSpecBinding,
-  RbacConfig,
+  PeerAuthentication,
+  RequestAuthentication,
   ServiceEntry,
-  ServiceMeshRbacConfig,
-  ServiceRole,
-  ServiceRoleBinding,
   Sidecar,
   Validations,
   VirtualService,
-  VirtualServices
+  WorkloadEntry,
+  WorkloadGroup
 } from './IstioObjects';
 import { ResourcePermissions } from './Permissions';
 
@@ -28,49 +20,35 @@ export interface IstioConfigItem {
   namespace: string;
   type: string;
   name: string;
+  creationTimestamp?: string;
+  resourceVersion?: string;
   gateway?: Gateway;
   virtualService?: VirtualService;
   destinationRule?: DestinationRule;
   serviceEntry?: ServiceEntry;
-  rule?: IstioRule;
-  adapter?: IstioAdapter;
-  template?: IstioTemplate;
-  quotaSpec?: QuotaSpec;
-  quotaSpecBinding?: QuotaSpecBinding;
-  policy?: Policy;
-  meshPolicy?: Policy;
-  serviceMeshPolicy?: Policy;
-  clusterRbacConfig?: ClusterRbacConfig;
-  rbacConfig?: RbacConfig;
   authorizationPolicy?: AuthorizationPolicy;
-  serviceMeshRbacConfig?: ServiceMeshRbacConfig;
   sidecar?: Sidecar;
-  serviceRole?: ServiceRole;
-  serviceRoleBinding?: ServiceRoleBinding;
+  peerAuthentication?: PeerAuthentication;
+  requestAuthentication?: RequestAuthentication;
+  workloadEntry?: WorkloadEntry;
+  workloadGroup?: WorkloadGroup;
+  envoyFilter?: EnvoyFilter;
   validation?: ObjectValidation;
 }
 
 export interface IstioConfigList {
   namespace: Namespace;
   gateways: Gateway[];
-  virtualServices: VirtualServices;
-  destinationRules: DestinationRules;
+  virtualServices: VirtualService[];
+  destinationRules: DestinationRule[];
   serviceEntries: ServiceEntry[];
-  rules: IstioRule[];
-  adapters: IstioAdapter[];
-  templates: IstioTemplate[];
-  quotaSpecs: QuotaSpec[];
-  quotaSpecBindings: QuotaSpecBinding[];
-  policies: Policy[];
-  meshPolicies: Policy[];
-  serviceMeshPolicies: Policy[];
-  clusterRbacConfigs: ClusterRbacConfig[];
-  rbacConfigs: RbacConfig[];
+  workloadEntries: WorkloadEntry[];
+  workloadGroups: WorkloadGroup[];
+  envoyFilters: EnvoyFilter[];
   authorizationPolicies: AuthorizationPolicy[];
-  serviceMeshRbacConfigs: ServiceMeshRbacConfig[];
   sidecars: Sidecar[];
-  serviceRoles: ServiceRole[];
-  serviceRoleBindings: ServiceRoleBinding[];
+  peerAuthentications: PeerAuthentication[];
+  requestAuthentications: RequestAuthentication[];
   permissions: { [key: string]: ResourcePermissions };
   validations: Validations;
 }
@@ -81,42 +59,45 @@ export const dicIstioType = {
   VirtualService: 'virtualservices',
   DestinationRule: 'destinationrules',
   ServiceEntry: 'serviceentries',
-  Rule: 'rules',
-  Adapter: 'adapters',
-  Template: 'templates',
-  QuotaSpec: 'quotaspecs',
-  QuotaSpecBinding: 'quotaspecbindings',
-  Policy: 'policies',
-  MeshPolicy: 'meshpolicies',
-  ClusterRbacConfig: 'clusterrbacconfigs',
-  RbacConfig: 'rbacconfigs',
   AuthorizationPolicy: 'authorizationpolicies',
-  ServiceRole: 'serviceroles',
-  ServiceRoleBinding: 'servicerolebindings',
-  ServiceMeshPolicy: 'servicemeshpolicies',
-  ServiceMeshRbacConfig: 'servicemeshrbacconfigs',
+  PeerAuthentication: 'peerauthentications',
+  RequestAuthentication: 'requestauthentications',
+  WorkloadEntry: 'workloadentries',
+  WorkloadGroup: 'workloadgroups',
+  EnvoyFilter: 'envoyfilters',
+
   gateways: 'Gateway',
   virtualservices: 'VirtualService',
   destinationrules: 'DestinationRule',
   serviceentries: 'ServiceEntry',
-  rules: 'Rule',
-  adapters: 'Adapter',
-  templates: 'Template',
-  quotaspecs: 'QuotaSpec',
-  quotaspecbindings: 'QuotaSpecBinding',
-  instance: 'Instance',
-  handler: 'Handler',
-  policies: 'Policy',
-  meshpolicies: 'MeshPolicy',
-  clusterrbacconfigs: 'ClusterRbacConfig',
-  rbacconfigs: 'RbacConfig',
   authorizationpolicies: 'AuthorizationPolicy',
   sidecars: 'Sidecar',
-  serviceroles: 'ServiceRole',
-  servicerolebindings: 'ServiceRoleBinding',
-  servicemeshpolicies: 'ServiceMeshPolicy',
-  servicemeshrbacconfigs: 'ServiceMeshRbacConfig'
+  peerauthentications: 'PeerAuthentication',
+  requestauthentications: 'RequestAuthentication',
+  workloadentries: 'WorkloadEntry',
+  workloadgroups: 'WorkloadGroup',
+  envoyfilters: 'EnvoyFilter',
+
+  gateway: 'Gateway',
+  virtualservice: 'VirtualService',
+  destinationrule: 'DestinationRule',
+  serviceentry: 'ServiceEntry',
+  authorizationpolicy: 'AuthorizationPolicy',
+  sidecar: 'Sidecar',
+  peerauthentication: 'PeerAuthentication',
+  requestauthentication: 'RequestAuthentication',
+  workloadentry: 'WorkloadEntry',
+  workloadgroup: 'WorkloadGroup',
+  envoyfilter: 'EnvoyFilter'
 };
+
+export function validationKey(name: string, namespace?: string): string {
+  if (namespace !== undefined) {
+    return name + '.' + namespace;
+  } else {
+    return name;
+  }
+}
 
 const includeName = (name: string, names: string[]) => {
   for (let i = 0; i < names.length; i++) {
@@ -134,30 +115,16 @@ export const filterByName = (unfiltered: IstioConfigList, names: string[]): Isti
   return {
     namespace: unfiltered.namespace,
     gateways: unfiltered.gateways.filter(gw => includeName(gw.metadata.name, names)),
-    virtualServices: {
-      permissions: unfiltered.virtualServices.permissions,
-      items: unfiltered.virtualServices.items.filter(vs => includeName(vs.metadata.name, names))
-    },
-    destinationRules: {
-      permissions: unfiltered.destinationRules.permissions,
-      items: unfiltered.destinationRules.items.filter(dr => includeName(dr.metadata.name, names))
-    },
+    virtualServices: unfiltered.virtualServices.filter(vs => includeName(vs.metadata.name, names)),
+    destinationRules: unfiltered.destinationRules.filter(dr => includeName(dr.metadata.name, names)),
     serviceEntries: unfiltered.serviceEntries.filter(se => includeName(se.metadata.name, names)),
-    rules: unfiltered.rules.filter(r => includeName(r.metadata.name, names)),
-    adapters: unfiltered.adapters.filter(r => includeName(r.metadata.name, names)),
-    templates: unfiltered.templates.filter(r => includeName(r.metadata.name, names)),
-    quotaSpecs: unfiltered.quotaSpecs.filter(qs => includeName(qs.metadata.name, names)),
-    quotaSpecBindings: unfiltered.quotaSpecBindings.filter(qsb => includeName(qsb.metadata.name, names)),
-    policies: unfiltered.policies.filter(p => includeName(p.metadata.name, names)),
-    meshPolicies: unfiltered.meshPolicies.filter(p => includeName(p.metadata.name, names)),
-    serviceMeshPolicies: unfiltered.serviceMeshPolicies.filter(p => includeName(p.metadata.name, names)),
-    clusterRbacConfigs: unfiltered.clusterRbacConfigs.filter(rc => includeName(rc.metadata.name, names)),
-    rbacConfigs: unfiltered.rbacConfigs.filter(rc => includeName(rc.metadata.name, names)),
     authorizationPolicies: unfiltered.authorizationPolicies.filter(rc => includeName(rc.metadata.name, names)),
-    serviceMeshRbacConfigs: unfiltered.serviceMeshRbacConfigs.filter(rc => includeName(rc.metadata.name, names)),
     sidecars: unfiltered.sidecars.filter(sc => includeName(sc.metadata.name, names)),
-    serviceRoles: unfiltered.serviceRoles.filter(sr => includeName(sr.metadata.name, names)),
-    serviceRoleBindings: unfiltered.serviceRoleBindings.filter(srb => includeName(srb.metadata.name, names)),
+    peerAuthentications: unfiltered.peerAuthentications.filter(pa => includeName(pa.metadata.name, names)),
+    requestAuthentications: unfiltered.requestAuthentications.filter(ra => includeName(ra.metadata.name, names)),
+    workloadEntries: unfiltered.workloadEntries.filter(we => includeName(we.metadata.name, names)),
+    workloadGroups: unfiltered.workloadGroups.filter(wg => includeName(wg.metadata.name, names)),
+    envoyFilters: unfiltered.envoyFilters.filter(ef => includeName(ef.metadata.name, names)),
     validations: unfiltered.validations,
     permissions: unfiltered.permissions
   };
@@ -197,8 +164,8 @@ export const filterByConfigValidation = (unfiltered: IstioConfigItem[], configFi
 export const toIstioItems = (istioConfigList: IstioConfigList): IstioConfigItem[] => {
   const istioItems: IstioConfigItem[] = [];
 
-  const hasValidations = (type: string, name: string) =>
-    istioConfigList.validations[type] && istioConfigList.validations[type][name];
+  const hasValidations = (type: string, name: string, namespace: string) =>
+    istioConfigList.validations[type] && istioConfigList.validations[type][validationKey(name, namespace)];
 
   const nonItems = ['validations', 'permissions', 'namespace'];
 
@@ -223,8 +190,10 @@ export const toIstioItems = (istioConfigList: IstioConfigList): IstioConfigItem[
         namespace: istioConfigList.namespace.name,
         type: typeName,
         name: entry.metadata.name,
-        validation: hasValidations(typeName, entry.metadata.name)
-          ? istioConfigList.validations[typeName][entry.metadata.name]
+        creationTimestamp: entry.metadata.creationTimestamp,
+        resourceVersion: entry.metadata.resourceVersion,
+        validation: hasValidations(typeName, entry.metadata.name, entry.metadata.namespace)
+          ? istioConfigList.validations[typeName][validationKey(entry.metadata.name, entry.metadata.namespace)]
           : undefined
       };
 
@@ -233,5 +202,114 @@ export const toIstioItems = (istioConfigList: IstioConfigList): IstioConfigItem[
     });
   });
 
+  return istioItems;
+};
+
+export const vsToIstioItems = (vss: VirtualService[], validations: Validations): IstioConfigItem[] => {
+  const istioItems: IstioConfigItem[] = [];
+  const hasValidations = (vKey: string) => validations.virtualservice && validations.virtualservice[vKey];
+
+  const typeNameProto = dicIstioType['virtualservices']; // ex. serviceEntries -> ServiceEntry
+  const typeName = typeNameProto.toLowerCase(); // ex. ServiceEntry -> serviceentry
+  const entryName = typeNameProto.charAt(0).toLowerCase() + typeNameProto.slice(1);
+
+  vss.forEach(vs => {
+    const vKey = validationKey(vs.metadata.name, vs.metadata.namespace);
+    const item = {
+      namespace: vs.metadata.namespace || '',
+      type: typeName,
+      name: vs.metadata.name,
+      creationTimestamp: vs.metadata.creationTimestamp,
+      resourceVersion: vs.metadata.resourceVersion,
+      validation: hasValidations(vKey) ? validations.virtualservice[vKey] : undefined
+    };
+    item[entryName] = vs;
+    istioItems.push(item);
+  });
+  return istioItems;
+};
+
+export const drToIstioItems = (drs: DestinationRule[], validations: Validations): IstioConfigItem[] => {
+  const istioItems: IstioConfigItem[] = [];
+  const hasValidations = (vKey: string) => validations.destinationrule && validations.destinationrule[vKey];
+
+  const typeNameProto = dicIstioType['destinationrules']; // ex. serviceEntries -> ServiceEntry
+  const typeName = typeNameProto.toLowerCase(); // ex. ServiceEntry -> serviceentry
+  const entryName = typeNameProto.charAt(0).toLowerCase() + typeNameProto.slice(1);
+
+  drs.forEach(dr => {
+    const vKey = validationKey(dr.metadata.name, dr.metadata.namespace);
+    const item = {
+      namespace: dr.metadata.namespace || '',
+      type: typeName,
+      name: dr.metadata.name,
+      creationTimestamp: dr.metadata.creationTimestamp,
+      resourceVersion: dr.metadata.resourceVersion,
+      validation: hasValidations(vKey) ? validations.destinationrule[vKey] : undefined
+    };
+    item[entryName] = dr;
+    istioItems.push(item);
+  });
+  return istioItems;
+};
+
+export const gwToIstioItems = (gws: Gateway[], vss: VirtualService[], validations: Validations): IstioConfigItem[] => {
+  const istioItems: IstioConfigItem[] = [];
+  const hasValidations = (vKey: string) => validations.gateway && validations.gateway[vKey];
+  const vsGateways = new Set();
+
+  const typeNameProto = dicIstioType['gateways']; // ex. serviceEntries -> ServiceEntry
+  const typeName = typeNameProto.toLowerCase(); // ex. ServiceEntry -> serviceentry
+  const entryName = typeNameProto.charAt(0).toLowerCase() + typeNameProto.slice(1);
+
+  vss.forEach(vs => {
+    vs.spec.gateways?.forEach(vsGatewayName => {
+      if (vsGatewayName.indexOf('/') < 0) {
+        vsGateways.add(vs.metadata.namespace + '/' + vsGatewayName);
+      } else {
+        vsGateways.add(vsGatewayName);
+      }
+    });
+  });
+
+  gws.forEach(gw => {
+    if (vsGateways.has(gw.metadata.namespace + '/' + gw.metadata.name)) {
+      const vKey = validationKey(gw.metadata.name, gw.metadata.namespace);
+      const item = {
+        namespace: gw.metadata.namespace || '',
+        type: typeName,
+        name: gw.metadata.name,
+        creationTimestamp: gw.metadata.creationTimestamp,
+        resourceVersion: gw.metadata.resourceVersion,
+        validation: hasValidations(vKey) ? validations.gateway[vKey] : undefined
+      };
+      item[entryName] = gw;
+      istioItems.push(item);
+    }
+  });
+  return istioItems;
+};
+
+export const seToIstioItems = (see: ServiceEntry[], validations: Validations): IstioConfigItem[] => {
+  const istioItems: IstioConfigItem[] = [];
+  const hasValidations = (vKey: string) => validations.serviceentry && validations.serviceentry[vKey];
+
+  const typeNameProto = dicIstioType['serviceentries']; // ex. serviceEntries -> ServiceEntry
+  const typeName = typeNameProto.toLowerCase(); // ex. ServiceEntry -> serviceentry
+  const entryName = typeNameProto.charAt(0).toLowerCase() + typeNameProto.slice(1);
+
+  see.forEach(se => {
+    const vKey = validationKey(se.metadata.name, se.metadata.namespace);
+    const item = {
+      namespace: se.metadata.namespace || '',
+      type: typeName,
+      name: se.metadata.name,
+      creationTimestamp: se.metadata.creationTimestamp,
+      resourceVersion: se.metadata.resourceVersion,
+      validation: hasValidations(vKey) ? validations.serviceentry[vKey] : undefined
+    };
+    item[entryName] = se;
+    istioItems.push(item);
+  });
   return istioItems;
 };

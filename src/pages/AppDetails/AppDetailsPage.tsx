@@ -1,35 +1,30 @@
 import * as React from 'react';
-import * as API from '../../services/Api';
+import { connect } from 'react-redux';
 import { RouteComponentProps } from 'react-router-dom';
-import { App, AppId } from '../../types/App';
+import { ExternalLinkAltIcon } from '@patternfly/react-icons';
 import { Tab } from '@patternfly/react-core';
+
+import * as API from '../../services/Api';
+import { App, AppId } from '../../types/App';
 import AppInfo from './AppInfo';
 import * as AlertUtils from '../../utils/AlertUtils';
 import IstioMetricsContainer from '../../components/Metrics/IstioMetrics';
-import { AppHealth } from '../../types/Health';
 import { MetricsObjectTypes } from '../../types/Metrics';
 import CustomMetricsContainer from '../../components/Metrics/CustomMetrics';
-import BreadcrumbView from '../../components/BreadcrumbView/BreadcrumbView';
 import { RenderHeader } from '../../components/Nav/Page';
-import { EdgeLabelMode, GraphDefinition, GraphType, NodeParamsType, NodeType } from '../../types/Graph';
-import { fetchTrafficDetails } from '../../helpers/TrafficDetailsHelper';
-import TrafficDetails from '../../components/Metrics/TrafficDetails';
-import PfTitle from '../../components/Pf/PfTitle';
-import { DurationInSeconds } from '../../types/Common';
+import { DurationInSeconds, TimeInMilliseconds, TimeRange } from '../../types/Common';
 import { KialiAppState } from '../../store/Store';
 import { durationSelector } from '../../store/Selectors';
-import { connect } from 'react-redux';
 import ParameterizedTabs, { activeTab } from '../../components/Tab/Tabs';
-import { DurationDropdownContainer } from '../../components/DurationDropdown/DurationDropdown';
-import RefreshButtonContainer from '../../components/Refresh/RefreshButton';
-import TimeRangeComponent from 'components/Time/TimeRangeComponent';
-import { retrieveDuration } from 'components/Time/TimeRangeHelper';
-import GraphDataSource from '../../services/GraphDataSource';
+import { JaegerInfo } from '../../types/JaegerInfo';
+import TracesComponent from '../../components/JaegerIntegration/TracesComponent';
+import TrafficDetails from 'components/TrafficList/TrafficDetails';
+import TimeControl from '../../components/Time/TimeControl';
+import { AppHealth } from 'types/Health';
 
 type AppDetailsState = {
-  app: App;
+  app?: App;
   health?: AppHealth;
-  trafficData: GraphDefinition | null;
   // currentTab is needed to (un)mount tab components
   // when the tab is not rendered.
   currentTab: string;
@@ -37,181 +32,113 @@ type AppDetailsState = {
 
 type ReduxProps = {
   duration: DurationInSeconds;
+  jaegerInfo?: JaegerInfo;
+  lastRefreshAt: TimeInMilliseconds;
+  timeRange: TimeRange;
 };
 
 type AppDetailsProps = RouteComponentProps<AppId> & ReduxProps;
 
-const emptyApp = {
-  namespace: { name: '' },
-  name: '',
-  workloads: [],
-  serviceNames: [],
-  runtimes: []
-};
-
 const tabName = 'tab';
 const defaultTab = 'info';
-const trafficTabName = 'traffic';
+const tracesTabName = 'traces';
 const paramToTab: { [key: string]: number } = {
   info: 0,
   traffic: 1,
   in_metrics: 2,
-  out_metrics: 3
+  out_metrics: 3,
+  traces: 4
 };
+const nextTabIndex = 5;
 
 class AppDetails extends React.Component<AppDetailsProps, AppDetailsState> {
-  private graphDataSource: GraphDataSource;
-
   constructor(props: AppDetailsProps) {
     super(props);
-    this.state = {
-      app: emptyApp,
-      trafficData: null,
-      currentTab: activeTab(tabName, defaultTab)
-    };
-
-    this.graphDataSource = new GraphDataSource();
+    this.state = { currentTab: activeTab(tabName, defaultTab) };
   }
 
   componentDidMount(): void {
-    this.doRefresh();
+    this.fetchApp();
   }
 
   componentDidUpdate(prevProps: AppDetailsProps) {
+    const currentTab = activeTab(tabName, defaultTab);
     if (
       this.props.match.params.namespace !== prevProps.match.params.namespace ||
       this.props.match.params.app !== prevProps.match.params.app ||
-      this.state.currentTab !== activeTab(tabName, defaultTab) ||
+      this.props.lastRefreshAt !== prevProps.lastRefreshAt ||
+      currentTab !== this.state.currentTab ||
       this.props.duration !== prevProps.duration
     ) {
-      this.setState(
-        {
-          app: emptyApp,
-          health: undefined,
-          currentTab: activeTab(tabName, defaultTab)
-        },
-        () => this.doRefresh()
-      );
-    }
-  }
-
-  fetchTrafficDataOnTabChange = (tabValue: string): void => {
-    if (tabValue === trafficTabName && this.state.trafficData == null) {
-      this.fetchTrafficData();
-    }
-  };
-
-  doRefresh = () => {
-    const currentTab = this.state.currentTab;
-
-    if (this.state.app === emptyApp || currentTab === defaultTab) {
-      this.setState({ trafficData: null });
-      this.fetchApp();
-      this.loadMiniGraphData();
-    }
-
-    if (currentTab === trafficTabName) {
-      this.fetchTrafficData();
-    }
-  };
-
-  fetchApp = () => {
-    API.getApp(this.props.match.params.namespace, this.props.match.params.app)
-      .then(details => {
-        this.setState({ app: details.data });
-        const hasSidecar = details.data.workloads.some(w => w.istioSidecar);
-        return API.getAppHealth(
-          this.props.match.params.namespace,
-          this.props.match.params.app,
-          this.props.duration,
-          hasSidecar
-        );
-      })
-      .then(health => this.setState({ health: health }))
-      .catch(error => {
-        AlertUtils.addError('Could not fetch App Details.', error);
-      });
-  };
-
-  fetchTrafficData = () => {
-    const node: NodeParamsType = {
-      app: this.props.match.params.app,
-      namespace: { name: this.props.match.params.namespace },
-      nodeType: NodeType.APP,
-
-      // unneeded
-      workload: '',
-      service: '',
-      version: ''
-    };
-    const restParams = {
-      duration: `${retrieveDuration() || 600}s`,
-      graphType: GraphType.APP,
-      injectServiceNodes: true,
-      appenders: 'deadNode,serviceEntry'
-    };
-
-    fetchTrafficDetails(node, restParams).then(trafficData => {
-      if (trafficData !== undefined) {
-        this.setState({ trafficData: trafficData });
+      if (currentTab === 'info') {
+        this.fetchApp();
       }
-    });
-  };
-
-  istioSidecar() {
-    let istioSidecar = true; // assume true until proven otherwise
-    this.state.app.workloads.forEach(wkd => {
-      istioSidecar = istioSidecar && wkd.istioSidecar;
-    });
-    return istioSidecar;
+      if (currentTab !== this.state.currentTab) {
+        this.setState({ currentTab: currentTab });
+      }
+    }
   }
 
-  runtimeTabs() {
-    const staticTabsCount = 4;
-    let dynamicTabsCount: number = 0;
+  private fetchApp = () => {
+    const params: { [key: string]: string } = { rateInterval: String(this.props.duration) + 's', health: 'true' };
+    API.getApp(this.props.match.params.namespace, this.props.match.params.app, params)
+      .then(details => {
+        this.setState({
+          app: details.data,
+          health: AppHealth.fromJson(
+            this.props.match.params.namespace,
+            this.props.match.params.app,
+            details.data.health,
+            { rateInterval: this.props.duration, hasSidecar: details.data.workloads.some(w => w.istioSidecar) }
+          )
+        });
+      })
+      .catch(error => AlertUtils.addError('Could not fetch App Details.', error));
+  };
+
+  private runtimeTabs() {
+    let tabOffset = 0;
 
     const tabs: JSX.Element[] = [];
-    this.state.app.runtimes.forEach(runtime => {
-      runtime.dashboardRefs.forEach(dashboard => {
-        const tabKey = dynamicTabsCount + staticTabsCount;
-        paramToTab[dashboard.template] = tabKey;
+    if (this.state.app) {
+      this.state.app.runtimes.forEach(runtime => {
+        runtime.dashboardRefs.forEach(dashboard => {
+          if (dashboard.template !== 'envoy') {
+            const tabKey = tabOffset + nextTabIndex;
+            paramToTab['cd-' + dashboard.template] = tabKey;
 
-        const tab = (
-          <Tab title={dashboard.title} key={dashboard.template} eventKey={tabKey}>
-            <CustomMetricsContainer
-              namespace={this.props.match.params.namespace}
-              app={this.props.match.params.app}
-              template={dashboard.template}
-            />
-          </Tab>
-        );
-        tabs.push(tab);
-        dynamicTabsCount = dynamicTabsCount + 1;
+            const tab = (
+              <Tab title={dashboard.title} key={'cd-' + dashboard.template} eventKey={tabKey}>
+                <CustomMetricsContainer
+                  namespace={this.props.match.params.namespace}
+                  app={this.props.match.params.app}
+                  template={dashboard.template}
+                />
+              </Tab>
+            );
+            tabs.push(tab);
+            tabOffset++;
+          }
+        });
       });
-    });
+    }
 
     return tabs;
   }
 
-  staticTabs() {
+  private staticTabs() {
     const overTab = (
       <Tab title="Overview" eventKey={0} key={'Overview'}>
-        <AppInfo
-          app={this.state.app}
-          namespace={this.props.match.params.namespace}
-          health={this.state.health}
-          miniGraphDataSource={this.graphDataSource}
-        />
+        <AppInfo app={this.state.app} duration={this.props.duration} health={this.state.health} />
       </Tab>
     );
 
     const trafficTab = (
       <Tab title="Traffic" eventKey={1} key={'Traffic'}>
         <TrafficDetails
-          trafficData={this.state.trafficData}
+          itemName={this.props.match.params.app}
           itemType={MetricsObjectTypes.APP}
-          namespace={this.state.app.namespace.name}
-          appName={this.state.app.name}
+          namespace={this.props.match.params.namespace}
         />
       </Tab>
     );
@@ -238,95 +165,91 @@ class AppDetails extends React.Component<AppDetailsProps, AppDetailsState> {
       </Tab>
     );
 
-    return [overTab, trafficTab, inTab, outTab];
-  }
+    // Default tabs
+    const tabsArray: JSX.Element[] = [overTab, trafficTab, inTab, outTab];
 
-  renderActions = () => {
-    let component;
-    switch (this.state.currentTab) {
-      case 'info':
-        component = <DurationDropdownContainer id="app-info-duration-dropdown" />;
-        break;
-      case 'traffic':
-        component = (
-          <TimeRangeComponent
-            onChanged={this.fetchTrafficData}
-            allowCustom={false}
-            tooltip={'Time range for metrics'}
+    // Conditional Traces tab
+    if (this.props.jaegerInfo && this.props.jaegerInfo.enabled) {
+      if (this.props.jaegerInfo.integration) {
+        tabsArray.push(
+          <Tab eventKey={4} style={{ textAlign: 'center' }} title={'Traces'} key={tracesTabName}>
+            <TracesComponent
+              namespace={this.props.match.params.namespace}
+              target={this.props.match.params.app}
+              targetKind={'app'}
+            />
+          </Tab>
+        );
+      } else {
+        const service = this.props.jaegerInfo.namespaceSelector
+          ? this.props.match.params.app + '.' + this.props.match.params.namespace
+          : this.props.match.params.app;
+        tabsArray.push(
+          <Tab
+            eventKey={4}
+            href={this.props.jaegerInfo.url + `/search?service=${service}`}
+            target="_blank"
+            title={
+              <>
+                Traces <ExternalLinkAltIcon />
+              </>
+            }
           />
         );
-        break;
-      default:
-        return undefined;
+      }
     }
-    return (
-      <span style={{ position: 'absolute', right: '50px', zIndex: 1 }}>
-        {component}
-        <RefreshButtonContainer handleRefresh={this.doRefresh} />
-        &nbsp;
-      </span>
-    );
-  };
 
-  renderTabs() {
+    return tabsArray;
+  }
+
+  private renderTabs() {
     // PF4 Tabs doesn't support static tabs followed of an array of tabs created dynamically.
     return this.staticTabs().concat(this.runtimeTabs());
   }
 
   render() {
-    const istioSidecar = this.istioSidecar();
-
+    // set default to true: all dynamic tabs (unlisted below) are for runtimes dashboards, which uses custom time
+    let useCustomTime = true;
+    switch (this.state.currentTab) {
+      case 'info':
+      case 'traffic':
+        useCustomTime = false;
+        break;
+      case 'in_metrics':
+      case 'out_metrics':
+      case 'traces':
+        useCustomTime = true;
+        break;
+    }
     return (
       <>
-        <RenderHeader>
-          <BreadcrumbView location={this.props.location} />
-          <PfTitle location={this.props.location} istio={istioSidecar} />
-          {this.renderActions()}
-        </RenderHeader>
-        <ParameterizedTabs
-          id="basic-tabs"
-          onSelect={tabValue => {
-            this.setState({ currentTab: tabValue });
-          }}
-          tabMap={paramToTab}
-          tabName={tabName}
-          defaultTab={defaultTab}
-          postHandler={this.fetchTrafficDataOnTabChange}
-          activeTab={this.state.currentTab}
-          mountOnEnter={false}
-          unmountOnExit={true}
-        >
-          {this.renderTabs()}
-        </ParameterizedTabs>
+        <RenderHeader location={this.props.location} rightToolbar={<TimeControl customDuration={useCustomTime} />} />
+        {this.state.app && (
+          <ParameterizedTabs
+            id="basic-tabs"
+            onSelect={tabValue => {
+              this.setState({ currentTab: tabValue });
+            }}
+            tabMap={paramToTab}
+            tabName={tabName}
+            defaultTab={defaultTab}
+            activeTab={this.state.currentTab}
+            mountOnEnter={true}
+            unmountOnExit={true}
+          >
+            {this.renderTabs()}
+          </ParameterizedTabs>
+        )}
       </>
     );
   }
-
-  private loadMiniGraphData = () => {
-    this.graphDataSource.fetchGraphData({
-      namespaces: [{ name: this.props.match.params.namespace }],
-      duration: this.props.duration,
-      graphType: GraphType.APP,
-      injectServiceNodes: true,
-      edgeLabelMode: EdgeLabelMode.NONE,
-      showSecurity: false,
-      showUnusedNodes: false,
-      node: {
-        app: this.props.match.params.app,
-        namespace: { name: this.props.match.params.namespace },
-        nodeType: NodeType.APP,
-        service: '',
-        version: '',
-        workload: ''
-      }
-    });
-  };
 }
 
 const mapStateToProps = (state: KialiAppState) => ({
-  duration: durationSelector(state)
+  duration: durationSelector(state),
+  jaegerInfo: state.jaegerState.info,
+  lastRefreshAt: state.globalState.lastRefreshAt
 });
 
 const AppDetailsContainer = connect(mapStateToProps)(AppDetails);
-
 export default AppDetailsContainer;

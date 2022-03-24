@@ -1,65 +1,13 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
 exports[`HealthDetails renders deployments failure 1`] = `
-<div
+<Fragment
   key="0"
->
-  <strong>
-     Error Rate over 1m traffic
-  </strong>
-  <ul
-    style={
-      Object {
-        "listStyleType": "none",
-        "paddingLeft": 12,
-      }
-    }
-  >
-    <li
-      key="0"
-    >
-      <UnknownIcon
-        className="icon-na"
-        color="#72767b"
-        noVerticalAlign={false}
-        size="sm"
-        title={null}
-      />
-       
-      Inbound: No requests
-    </li>
-  </ul>
-</div>
+/>
 `;
 
 exports[`HealthDetails renders healthy 1`] = `
-<div
+<Fragment
   key="0"
->
-  <strong>
-     Error Rate over 1m traffic
-  </strong>
-  <ul
-    style={
-      Object {
-        "listStyleType": "none",
-        "paddingLeft": 12,
-      }
-    }
-  >
-    <li
-      key="0"
-    >
-      <UnknownIcon
-        className="icon-na"
-        color="#72767b"
-        noVerticalAlign={false}
-        size="sm"
-        title={null}
-      />
-       
-      Inbound: No requests
-    </li>
-  </ul>
-</div>
+/>
 `;

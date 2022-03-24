@@ -1,228 +1,167 @@
 import * as React from 'react';
 import { style } from 'typestyle';
-import { Grid, GridItem } from '@patternfly/react-core';
+import { Grid, GridItem, Stack, StackItem } from '@patternfly/react-core';
 import ServiceId from '../../types/ServiceId';
-import ServiceInfoDescription from './ServiceInfo/ServiceInfoDescription';
-import { ServiceDetailsInfo, validationToSeverity } from '../../types/ServiceInfo';
-import ServiceInfoVirtualServices from './ServiceInfo/ServiceInfoVirtualServices';
-import ServiceInfoDestinationRules from './ServiceInfo/ServiceInfoDestinationRules';
-import ServiceInfoWorkload from './ServiceInfo/ServiceInfoWorkload';
-import { ObjectValidation, Validations, ValidationTypes } from '../../types/IstioObjects';
-import { ThreeScaleInfo, ThreeScaleServiceRule } from '../../types/ThreeScale';
-import ParameterizedTabs, { activeTab } from '../../components/Tab/Tabs';
-import ErrorBoundaryWithMessage from '../../components/ErrorBoundary/ErrorBoundaryWithMessage';
-import { Tab } from '@patternfly/react-core';
-import Validation from '../../components/Validations/Validation';
+import ServiceDescription from './ServiceDescription';
+import { ServiceDetailsInfo } from '../../types/ServiceInfo';
+import { Gateway, ObjectValidation, PeerAuthentication, Validations } from '../../types/IstioObjects';
 import { RenderComponentScroll } from '../../components/Nav/Page';
-import GraphDataSource from '../../services/GraphDataSource';
+import { PromisesRegistry } from 'utils/CancelablePromises';
+import { DurationInSeconds, TimeInMilliseconds } from 'types/Common';
+import GraphDataSource from 'services/GraphDataSource';
+import {
+  drToIstioItems,
+  vsToIstioItems,
+  gwToIstioItems,
+  seToIstioItems,
+  validationKey
+} from '../../types/IstioConfigList';
+import { KialiAppState } from '../../store/Store';
+import { connect } from 'react-redux';
+import { durationSelector, meshWideMTLSEnabledSelector } from '../../store/Selectors';
+import MiniGraphCard from '../../components/CytoscapeGraph/MiniGraphCard';
+import IstioConfigCard from '../../components/IstioConfigCard/IstioConfigCard';
+import ServiceNetwork from './ServiceNetwork';
+import { GraphEdgeTapEvent } from '../../components/CytoscapeGraph/CytoscapeGraph';
+import history, { URLParam } from '../../app/History';
 
-interface ServiceDetails extends ServiceId {
-  serviceDetails: ServiceDetailsInfo;
-  gateways: string[];
+interface Props extends ServiceId {
+  duration: DurationInSeconds;
+  lastRefreshAt: TimeInMilliseconds;
+  mtlsEnabled: boolean;
+  serviceDetails?: ServiceDetailsInfo;
+  gateways: Gateway[];
+  peerAuthentications: PeerAuthentication[];
   validations: Validations;
-  onRefresh: () => void;
-  threeScaleInfo: ThreeScaleInfo;
-  threeScaleServiceRule?: ThreeScaleServiceRule;
-  miniGraphDataSource: GraphDataSource;
 }
 
 type ServiceInfoState = {
-  currentTab: string;
+  tabHeight?: number;
 };
 
-interface ValidationChecks {
-  hasVirtualServiceChecks: boolean;
-  hasDestinationRuleChecks: boolean;
-}
-
-const tabIconStyle = style({
-  fontSize: '0.9em'
+const fullHeightStyle = style({
+  height: '100%'
 });
 
-const tabName = 'list';
-const defaultTab = 'workloads';
-const paramToTab: { [key: string]: number } = {
-  workloads: 0,
-  virtualservices: 1,
-  destinationrules: 2
-};
+class ServiceInfo extends React.Component<Props, ServiceInfoState> {
+  private promises = new PromisesRegistry();
+  private graphDataSource = new GraphDataSource();
 
-class ServiceInfo extends React.Component<ServiceDetails, ServiceInfoState> {
-  constructor(props: ServiceDetails) {
+  constructor(props: Props) {
     super(props);
     this.state = {
-      currentTab: activeTab(tabName, defaultTab)
+      tabHeight: 300
     };
   }
 
-  componentDidUpdate() {
-    const aTab = activeTab(tabName, defaultTab);
+  componentDidMount() {
+    this.fetchBackend();
+  }
 
-    if (this.state.currentTab !== aTab) {
-      this.setState({
-        currentTab: aTab
-      });
+  componentDidUpdate(prev: Props) {
+    if (prev.duration !== this.props.duration || prev.serviceDetails !== this.props.serviceDetails) {
+      this.fetchBackend();
     }
   }
 
-  validationChecks(): ValidationChecks {
-    const validationChecks = {
-      hasVirtualServiceChecks: false,
-      hasDestinationRuleChecks: false
-    };
-    const validations = this.props.validations || {};
-    validationChecks.hasVirtualServiceChecks = this.props.serviceDetails.virtualServices.items.some(
-      virtualService =>
-        validations.virtualservice &&
-        validations.virtualservice[virtualService.metadata.name] &&
-        validations.virtualservice[virtualService.metadata.name].checks &&
-        validations.virtualservice[virtualService.metadata.name].checks.length > 0
-    );
+  goToMetrics = (e: GraphEdgeTapEvent) => {
+    if (e.source !== e.target) {
+      const direction = e.source === this.props.service ? 'outbound' : 'inbound';
+      const destination = direction === 'inbound' ? 'source_canonical_service' : 'destination_canonical_service';
+      const urlParams = new URLSearchParams(history.location.search);
+      urlParams.set('tab', 'metrics');
+      urlParams.set(URLParam.BY_LABELS, destination + '=' + (e.source === this.props.service ? e.target : e.source));
+      history.replace(history.location.pathname + '?' + urlParams.toString());
+    }
+  };
 
-    validationChecks.hasDestinationRuleChecks = this.props.serviceDetails.destinationRules.items.some(
-      destinationRule =>
-        validations.destinationrule &&
-        destinationRule.metadata &&
-        validations.destinationrule[destinationRule.metadata.name] &&
-        validations.destinationrule[destinationRule.metadata.name].checks &&
-        validations.destinationrule[destinationRule.metadata.name].checks.length > 0
-    );
+  private fetchBackend = () => {
+    if (!this.props.serviceDetails) {
+      return;
+    }
 
-    return validationChecks;
-  }
+    this.promises.cancelAll();
+    this.graphDataSource.fetchForService(this.props.duration, this.props.namespace, this.props.service);
+  };
 
-  errorBoundaryMessage(resourceName: string) {
-    return `One of the ${resourceName} associated to this service has an invalid format`;
-  }
-
-  getServiceValidation(): ObjectValidation | undefined {
-    if (this.props.validations && this.props.validations.service) {
-      return this.props.validations.service[this.props.serviceDetails.service.name];
+  private getServiceValidation(): ObjectValidation | undefined {
+    if (this.props.validations && this.props.validations.service && this.props.serviceDetails) {
+      return this.props.validations.service[
+        validationKey(this.props.serviceDetails.service.name, this.props.namespace)
+      ];
     }
     return undefined;
   }
 
   render() {
-    const workloads = this.props.serviceDetails.workloads || [];
-    const virtualServices = this.props.serviceDetails.virtualServices || [];
-    const destinationRules = this.props.serviceDetails.destinationRules || [];
-    const validations = this.props.validations || {};
-    const validationChecks = this.validationChecks();
-    const getSeverityIcon: any = (severity: ValidationTypes = ValidationTypes.Error) => (
-      <span className={tabIconStyle}>
-        {' '}
-        <Validation severity={severity} />
-      </span>
+    const vsIstioConfigItems = this.props.serviceDetails?.virtualServices
+      ? vsToIstioItems(this.props.serviceDetails.virtualServices, this.props.serviceDetails.validations)
+      : [];
+    const drIstioConfigItems = this.props.serviceDetails?.destinationRules
+      ? drToIstioItems(this.props.serviceDetails.destinationRules, this.props.serviceDetails.validations)
+      : [];
+    const gwIstioConfigItems =
+      this.props?.gateways && this.props.serviceDetails?.virtualServices
+        ? gwToIstioItems(
+            this.props?.gateways,
+            this.props.serviceDetails.virtualServices,
+            this.props.serviceDetails.validations
+          )
+        : [];
+    const seIstioConfigItems = this.props.serviceDetails?.serviceEntries
+      ? seToIstioItems(this.props.serviceDetails.serviceEntries, this.props.serviceDetails.validations)
+      : [];
+    const istioConfigItems = seIstioConfigItems.concat(
+      gwIstioConfigItems.concat(vsIstioConfigItems.concat(drIstioConfigItems))
     );
 
-    const getValidationIcon = (keys: string[], type: string) => {
-      let severity = ValidationTypes.Warning;
-      keys.forEach(key => {
-        const validationsForIcon = (this.props.validations || {})![type][key];
-        if (validationToSeverity(validationsForIcon) === ValidationTypes.Error) {
-          severity = ValidationTypes.Error;
-        }
-      });
-      return getSeverityIcon(severity);
-    };
-
-    // @ts-ignore
-    const vsItems = virtualServices.items;
-    // @ts-ignore
-    const drItems = destinationRules.items;
-
-    const vsTabTitle: any = (
-      <>
-        Virtual Services ({vsItems.length})
-        {validationChecks.hasVirtualServiceChecks
-          ? getValidationIcon(
-              (this.props.serviceDetails.virtualServices.items || []).map(a => a.metadata.name),
-              'virtualservice'
-            )
-          : undefined}
-      </>
-    );
-
-    const drTabTitle: any = (
-      <>
-        Destination Rules ({drItems.length})
-        {validationChecks.hasDestinationRuleChecks
-          ? getValidationIcon(
-              (this.props.serviceDetails.destinationRules.items || []).map(a => a.metadata.name),
-              'destinationrule'
-            )
-          : undefined}
-      </>
-    );
+    // RenderComponentScroll handles height to provide an inner scroll combined with tabs
+    // This height needs to be propagated to minigraph to proper resize in height
+    // Graph resizes correctly on width
+    const height = this.state.tabHeight ? this.state.tabHeight - 115 : 300;
+    const graphContainerStyle = style({ width: '100%', height: height });
 
     return (
-      <RenderComponentScroll>
-        <Grid style={{ margin: '30px' }} gutter={'md'}>
-          <GridItem span={12}>
-            <ServiceInfoDescription
-              name={this.props.serviceDetails.service.name}
-              namespace={this.props.namespace}
-              createdAt={this.props.serviceDetails.service.createdAt}
-              resourceVersion={this.props.serviceDetails.service.resourceVersion}
-              additionalDetails={this.props.serviceDetails.additionalDetails}
-              istioEnabled={this.props.serviceDetails.istioSidecar}
-              labels={this.props.serviceDetails.service.labels}
-              selectors={this.props.serviceDetails.service.selectors}
-              ports={this.props.serviceDetails.service.ports}
-              type={this.props.serviceDetails.service.type}
-              ip={this.props.serviceDetails.service.ip}
-              endpoints={this.props.serviceDetails.endpoints}
-              health={this.props.serviceDetails.health}
-              externalName={this.props.serviceDetails.service.externalName}
-              threeScaleServiceRule={this.props.threeScaleServiceRule}
-              validations={this.getServiceValidation()}
-              miniGraphDatasource={this.props.miniGraphDataSource}
-            />
-          </GridItem>
-          <GridItem span={12}>
-            <ParameterizedTabs
-              id="service-tabs"
-              onSelect={tabValue => {
-                this.setState({ currentTab: tabValue });
-              }}
-              tabMap={paramToTab}
-              tabName={tabName}
-              defaultTab={defaultTab}
-              activeTab={this.state.currentTab}
-            >
-              <Tab eventKey={0} title={'Workloads (' + Object.keys(workloads).length + ')'}>
-                <ErrorBoundaryWithMessage message={this.errorBoundaryMessage('Workloads')}>
-                  <ServiceInfoWorkload
-                    service={this.props.serviceDetails}
-                    workloads={workloads}
-                    namespace={this.props.namespace}
+      <>
+        <RenderComponentScroll onResize={height => this.setState({ tabHeight: height })}>
+          <Grid gutter={'md'} className={fullHeightStyle}>
+            <GridItem span={4}>
+              <Stack gutter="md">
+                <StackItem>
+                  <ServiceDescription namespace={this.props.namespace} serviceDetails={this.props.serviceDetails} />
+                </StackItem>
+                {this.props.serviceDetails && (
+                  <ServiceNetwork
+                    serviceDetails={this.props.serviceDetails}
+                    gateways={this.props.gateways}
+                    validations={this.getServiceValidation()}
                   />
-                </ErrorBoundaryWithMessage>
-              </Tab>
-              <Tab eventKey={1} title={vsTabTitle}>
-                <ErrorBoundaryWithMessage message={this.errorBoundaryMessage('Virtual Services')}>
-                  <ServiceInfoVirtualServices
-                    service={this.props.serviceDetails}
-                    virtualServices={vsItems}
-                    validations={validations!.virtualservice}
-                  />
-                </ErrorBoundaryWithMessage>
-              </Tab>
-              <Tab eventKey={2} title={drTabTitle}>
-                <ErrorBoundaryWithMessage message={this.errorBoundaryMessage('Destination Rules')}>
-                  <ServiceInfoDestinationRules
-                    service={this.props.serviceDetails}
-                    destinationRules={drItems}
-                    validations={validations!.destinationrule}
-                  />
-                </ErrorBoundaryWithMessage>
-              </Tab>
-            </ParameterizedTabs>
-          </GridItem>
-        </Grid>
-      </RenderComponentScroll>
+                )}
+                <StackItem style={{ paddingBottom: '20px' }}>
+                  <IstioConfigCard name={this.props.service} items={istioConfigItems} />
+                </StackItem>
+              </Stack>
+            </GridItem>
+            <GridItem span={8}>
+              <MiniGraphCard
+                dataSource={this.graphDataSource}
+                mtlsEnabled={this.props.mtlsEnabled}
+                onEdgeTap={this.goToMetrics}
+                graphContainerStyle={graphContainerStyle}
+              />
+            </GridItem>
+          </Grid>
+        </RenderComponentScroll>
+      </>
     );
   }
 }
 
-export default ServiceInfo;
+const mapStateToProps = (state: KialiAppState) => ({
+  duration: durationSelector(state),
+  lastRefreshAt: state.globalState.lastRefreshAt,
+  mtlsEnabled: meshWideMTLSEnabledSelector(state)
+});
+
+const ServiceInfoContainer = connect(mapStateToProps)(ServiceInfo);
+export default ServiceInfoContainer;

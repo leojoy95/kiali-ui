@@ -8,6 +8,7 @@
   position: relative;
   min-height: 200px;
   border: 1px solid #8b8d8f;
+  font-size: 14px !important;
 }
 
 .istio-validation-error {
@@ -28,8 +29,8 @@
 div.ace_gutter-cell.ace_info {
   background-image: none;
   &::before {
-    content: '\E935';
-    font-family: 'PatternFlyIcons-webfont';
+    content: '\E026';
+    font-family: 'pficon';
     left: 5px;
     position: absolute;
   }

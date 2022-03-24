@@ -1,7 +1,7 @@
 import axios from 'axios';
 import axiosMockAdapter from 'axios-mock-adapter';
 import GraphDataSource, { EMPTY_GRAPH_DATA } from '../GraphDataSource';
-import { EdgeLabelMode, GraphType } from '../../types/Graph';
+import { DefaultTrafficRates, GraphType } from '../../types/Graph';
 import MockAdapter from 'axios-mock-adapter';
 
 const GRAPH_EMPTY_RESPONSE = {
@@ -15,13 +15,18 @@ const GRAPH_EMPTY_RESPONSE = {
 };
 const FETCH_PARAMS = {
   duration: 10,
-  edgeLabelMode: EdgeLabelMode.NONE,
+  edgeLabels: [],
   graphType: GraphType.VERSIONED_APP,
+  includeHealth: false,
+  includeLabels: false,
   injectServiceNodes: false,
   namespaces: [{ name: 'foo' }],
   queryTime: 0,
+  showIdleEdges: false,
+  showIdleNodes: false,
+  showOperationNodes: false,
   showSecurity: false,
-  showUnusedNodes: false
+  trafficRates: DefaultTrafficRates
 };
 
 describe('GraphDataSource', () => {
@@ -61,14 +66,14 @@ describe('GraphDataSource', () => {
     ds.fetchGraphData(FETCH_PARAMS);
 
     expect(ds.isLoading).toBeTruthy();
-    expect(mockLoadStartCallback).toHaveBeenCalledWith(true);
+    expect(mockLoadStartCallback).toHaveBeenCalledWith(true, FETCH_PARAMS);
   });
 
   it('informs data loading succeeded', done => {
     axiosMock.onGet('/api/namespaces/graph').reply(200, GRAPH_EMPTY_RESPONSE);
     const ds = new GraphDataSource();
 
-    ds.on('fetchSuccess', (graphTimestamp, graphDuration, graphData) => {
+    ds.on('fetchSuccess', (graphTimestamp, graphDuration, graphData, FETCH_PARAMS) => {
       expect(ds.isLoading).toBeFalsy();
       expect(ds.isError).toBeFalsy();
       expect(ds.errorMessage).toBeFalsy();
@@ -79,6 +84,7 @@ describe('GraphDataSource', () => {
       expect(ds.graphTimestamp).toEqual(graphTimestamp);
       expect(ds.graphDuration).toEqual(graphDuration);
       expect(ds.graphData).toEqual(graphData);
+      expect(ds.fetchParameters).toEqual(FETCH_PARAMS);
 
       done();
     });
@@ -87,7 +93,7 @@ describe('GraphDataSource', () => {
   });
 
   it('informs data loading failed', done => {
-    axiosMock.onGet('/api/namespaces/graph').reply(500, { error: 'foo bar' });
+    axiosMock.onGet('/api/namespaces/graph').reply(500, { error: 'foo bar', FETCH_PARAMS });
     const ds = new GraphDataSource();
 
     ds.on('fetchError', errorMsg => {
@@ -95,6 +101,7 @@ describe('GraphDataSource', () => {
       expect(ds.isError).toBeTruthy();
       expect(ds.errorMessage).toEqual('foo bar');
       expect(errorMsg).toEqual('Cannot load the graph: foo bar');
+      expect(ds.fetchParameters).toEqual(FETCH_PARAMS);
 
       done();
     });

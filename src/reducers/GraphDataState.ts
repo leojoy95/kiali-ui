@@ -2,56 +2,80 @@ import { getType } from 'typesafe-actions';
 import { GraphActions } from '../actions/GraphActions';
 import { KialiAppAction } from '../actions/KialiAppAction';
 import { GraphState } from '../store/Store';
-import { EdgeLabelMode, GraphType } from '../types/Graph';
+import { EdgeMode, GraphType, TrafficRate } from '../types/Graph';
 import { GraphToolbarActions } from '../actions/GraphToolbarActions';
-import { DagreGraph } from '../components/CytoscapeGraph/graphs/DagreGraph';
 import { updateState } from '../utils/Reducer';
+import { KialiDagreGraph } from '../components/CytoscapeGraph/graphs/KialiDagreGraph';
 
 export const INITIAL_GRAPH_STATE: GraphState = {
-  cyData: null,
-  layout: DagreGraph.getLayout(),
+  edgeMode: EdgeMode.ALL,
+  graphDefinition: null,
+  layout: KialiDagreGraph.getLayout(),
+  namespaceLayout: KialiDagreGraph.getLayout(),
   node: undefined,
+  rankResult: {
+    upperBound: 0
+  },
   summaryData: null,
   toolbarState: {
+    boxByCluster: true,
+    boxByNamespace: true,
     compressOnHide: true,
-    edgeLabelMode: EdgeLabelMode.NONE,
+    edgeLabels: [],
     findValue: '',
     graphType: GraphType.VERSIONED_APP,
     hideValue: '',
-    showCircuitBreakers: true,
+    rankBy: [],
     showFindHelp: false,
+    showIdleEdges: false,
+    showIdleNodes: false,
     showLegend: false,
     showMissingSidecars: true,
-    showNodeLabels: true,
+    showOperationNodes: false,
+    showRank: false,
     showSecurity: false,
     showServiceNodes: true,
     showTrafficAnimation: false,
-    showUnusedNodes: false,
-    showVirtualServices: true
-  }
+    showVirtualServices: true,
+    trafficRates: [
+      TrafficRate.GRPC_GROUP,
+      TrafficRate.GRPC_REQUEST,
+      TrafficRate.HTTP_GROUP,
+      TrafficRate.HTTP_REQUEST,
+      TrafficRate.TCP_GROUP,
+      TrafficRate.TCP_SENT
+    ]
+  },
+  updateTime: 0
 };
 
 // This Reducer allows changes to the 'graphDataState' portion of Redux Store
 const graphDataState = (state: GraphState = INITIAL_GRAPH_STATE, action: KialiAppAction): GraphState => {
   switch (action.type) {
-    case getType(GraphActions.changed):
+    case getType(GraphActions.onNamespaceChange):
       return updateState(state, {
         summaryData: INITIAL_GRAPH_STATE.summaryData
       });
+    case getType(GraphActions.setEdgeMode): {
+      return updateState(state, { edgeMode: action.payload });
+    }
+    case getType(GraphActions.setGraphDefinition):
+      return updateState(state, { graphDefinition: action.payload });
     case getType(GraphActions.setLayout):
       return updateState(state, { layout: action.payload });
+    case getType(GraphActions.setNamespaceLayout):
+      return updateState(state, { namespaceLayout: action.payload });
     case getType(GraphActions.setNode):
       return updateState(state, {
         node: action.payload,
         // TODO: This should be handled in GraphPage.ComponentDidUpdate (Init graph on node change)
         summaryData: INITIAL_GRAPH_STATE.summaryData
       });
-    case getType(GraphActions.updateGraph):
+    case getType(GraphActions.setRankResult):
+      return updateState(state, { rankResult: action.payload });
+    case getType(GraphActions.setUpdateTime):
       return updateState(state, {
-        cyData: updateState(state.cyData, {
-          updateTimestamp: action.payload.updateTimestamp,
-          cyRef: action.payload.cyRef
-        })
+        updateTime: action.payload
       });
     case getType(GraphActions.updateSummary):
       return updateState(state, {
@@ -62,10 +86,10 @@ const graphDataState = (state: GraphState = INITIAL_GRAPH_STATE, action: KialiAp
       });
     // Filter actions
     //
-    case getType(GraphToolbarActions.setEdgelLabelMode):
+    case getType(GraphToolbarActions.setEdgeLabels):
       return updateState(state, {
         toolbarState: updateState(state.toolbarState, {
-          edgeLabelMode: action.payload
+          edgeLabels: action.payload
         })
       });
     case getType(GraphToolbarActions.setFindValue):
@@ -75,9 +99,14 @@ const graphDataState = (state: GraphState = INITIAL_GRAPH_STATE, action: KialiAp
         })
       });
     case getType(GraphToolbarActions.setGraphType):
+      const isServiceGraph = action.payload === GraphType.SERVICE;
+      const showOperationNodes = isServiceGraph ? false : state.toolbarState.showOperationNodes;
+      const showServiceNodes = isServiceGraph ? false : state.toolbarState.showServiceNodes;
       return updateState(state, {
         toolbarState: updateState(state.toolbarState, {
-          graphType: action.payload
+          graphType: action.payload,
+          showOperationNodes: showOperationNodes,
+          showServiceNodes: showServiceNodes
         }),
         // TODO: This should be handled in GraphPage.ComponentDidUpdate (Init graph on type change)
         summaryData: INITIAL_GRAPH_STATE.summaryData
@@ -88,10 +117,38 @@ const graphDataState = (state: GraphState = INITIAL_GRAPH_STATE, action: KialiAp
           hideValue: action.payload
         })
       });
-    case getType(GraphToolbarActions.setShowUnusedNodes):
+    case getType(GraphToolbarActions.setIdleNodes):
       return updateState(state, {
         toolbarState: updateState(state.toolbarState, {
-          showUnusedNodes: action.payload
+          showIdleNodes: action.payload
+        })
+      });
+    case getType(GraphToolbarActions.setRankBy):
+      return updateState(state, {
+        toolbarState: updateState(state.toolbarState, {
+          rankBy: action.payload
+        })
+      });
+    case getType(GraphToolbarActions.setTrafficRates):
+      return updateState(state, {
+        toolbarState: updateState(state.toolbarState, {
+          trafficRates: action.payload
+        })
+      });
+    case getType(GraphToolbarActions.resetSettings):
+      return updateState(state, {
+        toolbarState: INITIAL_GRAPH_STATE.toolbarState
+      });
+    case getType(GraphToolbarActions.toggleBoxByCluster):
+      return updateState(state, {
+        toolbarState: updateState(state.toolbarState, {
+          boxByCluster: !state.toolbarState.boxByCluster
+        })
+      });
+    case getType(GraphToolbarActions.toggleBoxByNamespace):
+      return updateState(state, {
+        toolbarState: updateState(state.toolbarState, {
+          boxByNamespace: !state.toolbarState.boxByNamespace
         })
       });
     case getType(GraphToolbarActions.toggleCompressOnHide):
@@ -104,18 +161,6 @@ const graphDataState = (state: GraphState = INITIAL_GRAPH_STATE, action: KialiAp
       return updateState(state, {
         toolbarState: updateState(state.toolbarState, {
           showFindHelp: !state.toolbarState.showFindHelp
-        })
-      });
-    case getType(GraphToolbarActions.toggleGraphNodeLabel):
-      return updateState(state, {
-        toolbarState: updateState(state.toolbarState, {
-          showNodeLabels: !state.toolbarState.showNodeLabels
-        })
-      });
-    case getType(GraphToolbarActions.toggleGraphCircuitBreakers):
-      return updateState(state, {
-        toolbarState: updateState(state.toolbarState, {
-          showCircuitBreakers: !state.toolbarState.showCircuitBreakers
         })
       });
     case getType(GraphToolbarActions.toggleGraphVirtualServices):
@@ -136,10 +181,36 @@ const graphDataState = (state: GraphState = INITIAL_GRAPH_STATE, action: KialiAp
           showSecurity: !state.toolbarState.showSecurity
         })
       });
+    case getType(GraphToolbarActions.toggleIdleEdges):
+      return updateState(state, {
+        toolbarState: updateState(state.toolbarState, {
+          showIdleEdges: !state.toolbarState.showIdleEdges
+        })
+      });
+    case getType(GraphToolbarActions.toggleIdleNodes):
+      return updateState(state, {
+        toolbarState: updateState(state.toolbarState, {
+          showIdleNodes: !state.toolbarState.showIdleNodes
+        })
+      });
     case getType(GraphToolbarActions.toggleLegend):
       return updateState(state, {
         toolbarState: updateState(state.toolbarState, {
           showLegend: !state.toolbarState.showLegend
+        })
+      });
+    case getType(GraphToolbarActions.toggleOperationNodes):
+      return updateState(state, {
+        toolbarState: updateState(state.toolbarState, {
+          showOperationNodes: !state.toolbarState.showOperationNodes
+        }),
+        // TODO: This should be handled in GraphPage.ComponentDidUpdate (Init graph on type change)
+        summaryData: INITIAL_GRAPH_STATE.summaryData
+      });
+    case getType(GraphToolbarActions.toggleRank):
+      return updateState(state, {
+        toolbarState: updateState(state.toolbarState, {
+          showRank: !state.toolbarState.showRank
         })
       });
     case getType(GraphToolbarActions.toggleServiceNodes):
@@ -154,12 +225,6 @@ const graphDataState = (state: GraphState = INITIAL_GRAPH_STATE, action: KialiAp
       return updateState(state, {
         toolbarState: updateState(state.toolbarState, {
           showTrafficAnimation: !state.toolbarState.showTrafficAnimation
-        })
-      });
-    case getType(GraphToolbarActions.toggleUnusedNodes):
-      return updateState(state, {
-        toolbarState: updateState(state.toolbarState, {
-          showUnusedNodes: !state.toolbarState.showUnusedNodes
         })
       });
     default:

@@ -17,7 +17,7 @@ export interface State<R> {
 }
 
 export abstract class Component<P extends Props<R>, S extends State<R>, R> extends React.Component<P, S> {
-  abstract sortItemList(listItems: R[], sortField: SortField<R>, isAscending: boolean): Promise<R[]>;
+  abstract sortItemList(listItems: R[], sortField: SortField<R>, isAscending: boolean): R[];
   abstract updateListItems(resetPagination?: boolean): void;
 
   constructor(props: P) {
@@ -43,23 +43,14 @@ export abstract class Component<P extends Props<R>, S extends State<R>, R> exten
     this.handleError(errMsg);
   }
 
-  updateSortField = (sortField: SortField<R>) => {
-    this.sortItemList(this.state.listItems, sortField, this.state.isSortAscending).then(sorted => {
-      this.setState({
-        currentSortField: sortField,
-        listItems: sorted
-      });
-      HistoryManager.setParam(URLParam.SORT, sortField.param);
+  updateSort = (sortField: SortField<R>, isSortAscending: boolean) => {
+    this.setState({
+      currentSortField: sortField,
+      isSortAscending: isSortAscending,
+      listItems: this.sortItemList(this.state.listItems, sortField, isSortAscending)
     });
-  };
 
-  updateSortDirection = () => {
-    this.sortItemList(this.state.listItems, this.state.currentSortField, !this.state.isSortAscending).then(sorted => {
-      this.setState({
-        isSortAscending: !this.state.isSortAscending,
-        listItems: sorted
-      });
-      HistoryManager.setParam(URLParam.DIRECTION, this.state.isSortAscending ? 'asc' : 'desc');
-    });
+    HistoryManager.setParam(URLParam.SORT, sortField.param);
+    HistoryManager.setParam(URLParam.DIRECTION, isSortAscending ? 'asc' : 'desc');
   };
 }

@@ -57,7 +57,7 @@ class AlertDrawerMessage extends React.PureComponent<AlertDrawerMessageProps> {
               onToggle={() => this.props.toggleMessageDetail(this.props.message)}
               isExpanded={this.props.message.showDetail}
             >
-              <pre>{this.props.message.detail}</pre>
+              <pre style={{ whiteSpace: 'pre-wrap' }}>{this.props.message.detail}</pre>
             </Expandable>
           )}
           {this.props.message.count > 1 && (
@@ -82,8 +82,5 @@ const mapDispatchToProps = (dispatch: ThunkDispatch<KialiAppState, void, KialiAp
   };
 };
 
-const AlertDrawerMessageContainer = connect(
-  null,
-  mapDispatchToProps
-)(AlertDrawerMessage);
+const AlertDrawerMessageContainer = connect(null, mapDispatchToProps)(AlertDrawerMessage);
 export default AlertDrawerMessageContainer;

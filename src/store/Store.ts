@@ -3,16 +3,30 @@ import Namespace from '../types/Namespace';
 import {
   DurationInSeconds,
   IntervalInMilliseconds,
-  UserName,
   RawDate,
   TimeInMilliseconds,
-  ReplayWindow
+  TimeRange,
+  UserName
 } from '../types/Common';
-import { EdgeLabelMode, Layout, GraphType, SummaryData, CyData, NodeParamsType } from '../types/Graph';
+import {
+  EdgeLabelMode,
+  EdgeMode,
+  GraphDefinition,
+  GraphType,
+  Layout,
+  NodeParamsType,
+  RankMode,
+  RankResult,
+  SummaryData,
+  TrafficRate
+} from '../types/Graph';
 import { TLSStatus } from '../types/TLSStatus';
 import { StatusState } from '../types/StatusState';
 import { TourInfo } from 'components/Tour/TourStop';
-import { JaegerInfo } from 'types/JaegerInfo';
+import { ComponentStatus } from '../types/IstioStatus';
+import { JaegerState } from 'reducers/JaegerState';
+import { MetricsStatsState } from 'reducers/MetricsStatsState';
+import { CertsInfo } from 'types/CertsInfo';
 
 // Store is the Redux Data store
 
@@ -33,22 +47,27 @@ export interface NamespaceState {
 // Various pages are described here with their various sections
 export interface GraphToolbarState {
   // dropdown props
-  edgeLabelMode: EdgeLabelMode;
+  edgeLabels: EdgeLabelMode[];
   graphType: GraphType;
+  rankBy: RankMode[];
+  trafficRates: TrafficRate[];
   // find props
   findValue: string;
   hideValue: string;
   showFindHelp: boolean;
   // Toggle props
+  boxByCluster: boolean;
+  boxByNamespace: boolean;
   compressOnHide: boolean;
-  showCircuitBreakers: boolean;
+  showIdleEdges: boolean;
+  showIdleNodes: boolean;
   showLegend: boolean;
   showMissingSidecars: boolean;
-  showNodeLabels: boolean;
+  showOperationNodes: boolean;
+  showRank: boolean;
   showSecurity: boolean;
   showServiceNodes: boolean;
   showTrafficAnimation: boolean;
-  showUnusedNodes: boolean;
   showVirtualServices: boolean;
 }
 
@@ -61,12 +80,15 @@ export interface MessageCenterState {
 }
 
 export interface GraphState {
-  // cyData is updated when the graph is fully rendered (i.e. after refresh)
-  cyData: CyData | null;
+  edgeMode: EdgeMode;
+  graphDefinition: GraphDefinition | null; // Not for consumption. Only for "Debug" dialog.
   layout: Layout;
+  namespaceLayout: Layout;
   node?: NodeParamsType;
+  rankResult: RankResult;
   summaryData: SummaryData | null;
   toolbarState: GraphToolbarState;
+  updateTime: TimeInMilliseconds;
 }
 
 export enum LoginStatus {
@@ -83,9 +105,10 @@ export interface LoginSession {
 }
 
 export interface LoginState {
-  status: LoginStatus;
-  session?: LoginSession;
+  landingRoute?: string;
   message: string;
+  session?: LoginSession;
+  status: LoginStatus;
 }
 
 export interface InterfaceSettings {
@@ -98,7 +121,7 @@ export interface UserSettings {
   refreshInterval: IntervalInMilliseconds;
   replayActive: boolean;
   replayQueryTime: TimeInMilliseconds;
-  replayWindow: ReplayWindow;
+  timeRange: TimeRange;
 }
 
 export interface TourState {
@@ -113,6 +136,8 @@ export interface KialiAppState {
   globalState: GlobalState;
   statusState: StatusState;
   meshTLSStatus: TLSStatus;
+  istioStatus: ComponentStatus[];
+  istioCertsInfo: CertsInfo[];
   /** Page Settings */
   authentication: LoginState;
   messageCenter: MessageCenterState;
@@ -121,6 +146,7 @@ export interface KialiAppState {
   /** User Settings */
   userSettings: UserSettings;
   /** Jaeger Settings */
-  jaegerState: JaegerInfo | null;
+  jaegerState: JaegerState;
   tourState: TourState;
+  metricsStats: MetricsStatsState;
 }

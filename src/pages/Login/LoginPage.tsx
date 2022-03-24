@@ -8,8 +8,8 @@ import {
   FormGroup,
   FormHelperText,
   ListItem,
+  ListVariant,
   LoginFooterItem,
-  LoginForm,
   LoginPage as LoginNext,
   TextInput
 } from '@patternfly/react-core';
@@ -19,6 +19,8 @@ import { AuthStrategy } from '../../types/Auth';
 import { authenticationConfig, kialiLogo } from '../../config';
 import { KialiAppAction } from '../../actions/KialiAppAction';
 import LoginThunkActions from '../../actions/LoginThunkActions';
+import { isAuthStrategyOAuth } from '../../config/AuthenticationConfig';
+//import { c_wizard__nav_BoxShadow } from '@patternfly/react-tokens';
 
 type LoginProps = {
   status: LoginStatus;
@@ -26,7 +28,6 @@ type LoginProps = {
   message?: string;
   error?: any;
   authenticate: (username: string, password: string) => void;
-  checkCredentials: () => void;
   isPostLoginPerforming: boolean;
   postLoginErrorMsg?: string;
 };
@@ -62,18 +63,11 @@ export class LoginPage extends React.Component<LoginProps, LoginState> {
   }
 
   componentDidMount() {
-    // handle initial path from the browser
-    this.props.checkCredentials();
-
     const loginInput = document.getElementById('pf-login-username-id');
     if (loginInput) {
       loginInput.focus();
     }
   }
-
-  handleUsernameChange = value => {
-    this.setState({ username: value });
-  };
 
   handlePasswordChange = passwordValue => {
     this.setState({ password: passwordValue });
@@ -82,9 +76,11 @@ export class LoginPage extends React.Component<LoginProps, LoginState> {
   handleSubmit = (e: any) => {
     e.preventDefault();
 
-    if (authenticationConfig.strategy === AuthStrategy.openshift) {
-      // If we are using OpenShift OAuth, take the user back to the OpenShift OAuth login
+    if (isAuthStrategyOAuth()) {
+      // If we are using OpenShift or OpenId strategy, take the user back to the authorization endpoint
       window.location.href = authenticationConfig.authorizationEndpoint!;
+    } else if (authenticationConfig.strategy === AuthStrategy.header) {
+      window.location.href = (window as any).WEB_ROOT ? (window as any).WEB_ROOT : '/';
     } else if (authenticationConfig.strategy === AuthStrategy.token) {
       if (this.state.password.trim().length !== 0 && this.props.authenticate) {
         this.props.authenticate('', this.state.password);
@@ -104,35 +100,9 @@ export class LoginPage extends React.Component<LoginProps, LoginState> {
           filledInputs: false
         });
       }
-    } else {
-      this.setState({
-        isValidUsername: !!this.state.username,
-        isValidPassword: !!this.state.password,
-        filledInputs: !!this.state.username && !!this.state.password
-      });
-
-      if (!!this.state.username && !!this.state.password && this.props.authenticate) {
-        this.props.authenticate(this.state.username, this.state.password);
-        this.setState({ showHelperText: false, errorInput: '' });
-      } else {
-        let message = 'Invalid login credentials.';
-        message +=
-          !!!this.state.username && !!!this.state.password
-            ? 'Username and password are required.'
-            : !!this.state.username
-            ? 'Password is required.'
-            : 'Username is required.';
-
-        this.setState({
-          showHelperText: true,
-          errorInput: message,
-          isValidUsername: false,
-          isValidPassword: false
-        });
-      }
     }
   };
-  renderMessage = (message: string | undefined, type?: string) => {
+  renderMessage = (message: React.ReactNode | undefined, type: string | undefined, key: string) => {
     if (!message) {
       return '';
     }
@@ -143,10 +113,7 @@ export class LoginPage extends React.Component<LoginProps, LoginState> {
       : 'warning';
     const icon = variant === 'danger' ? <ExclamationCircleIcon /> : <ExclamationTriangleIcon />;
     return (
-      <span
-        key={message}
-        style={{ color: variant === 'danger' ? '#c00' : '#f0ab00', fontWeight: 'bold', fontSize: 16 }}
-      >
+      <span key={key} style={{ color: variant === 'danger' ? '#c00' : '#f0ab00', fontWeight: 'bold', fontSize: 16 }}>
         {icon}
         &nbsp; {message}
       </span>
@@ -156,26 +123,52 @@ export class LoginPage extends React.Component<LoginProps, LoginState> {
   getHelperMessage = () => {
     const messages: any[] = [];
     if (this.state.showHelperText) {
-      messages.push(this.renderMessage(this.state.errorInput));
-    }
-    if (authenticationConfig.secretMissing) {
-      messages.push(
-        this.renderMessage(
-          `The Kiali secret is missing. Users are prohibited from accessing Kiali until an administrator
-          creates a valid secret. Please refer to the Kiali documentation for more details.`,
-          'danger'
-        )
-      );
+      messages.push(this.renderMessage(this.state.errorInput, undefined, 'helperText'));
     }
     if (this.props.status === LoginStatus.expired) {
-      messages.push(this.renderMessage('Your session has expired or was terminated in another window.', 'warning'));
+      messages.push(
+        this.renderMessage('Your session has expired or was terminated in another window.', 'warning', 'sessionExpired')
+      );
     }
-    if (!authenticationConfig.secretMissing && this.props.status === LoginStatus.error) {
+    if (this.props.status === LoginStatus.error) {
       messages.push(this.props.message);
     }
     if (this.props.postLoginErrorMsg) {
-      messages.push(this.renderMessage(this.props.postLoginErrorMsg));
+      messages.push(this.renderMessage(this.props.postLoginErrorMsg, undefined, 'postLoginError'));
     }
+
+    // Get error messages passed on the URL
+    const pageParams = window.location.search;
+    const urlParams = new URLSearchParams(pageParams);
+
+    // When using OpenId auth, the IdP can redirect back with `error` and `error_description`
+    // as url parameters. If these params are set, show them as errors.
+    // Reference: https://openid.net/specs/openid-connect-core-1_0-final.html#AuthError
+    if (urlParams.get('error')) {
+      if (urlParams.get('error_description')) {
+        messages.push(
+          this.renderMessage(`Authentication error: ${urlParams.get('error_description')}`, 'danger', 'idp-err')
+        );
+      } else {
+        messages.push(
+          this.renderMessage(
+            `The OpenID provider returned the following error code: ${urlParams.get('error')}`,
+            'danger',
+            'idp-err'
+          )
+        );
+      }
+    }
+
+    // Also, when using OpenId auth, the IdP can return with success. However, in the "authorization code" flow,
+    // the Kiali backend still needs to do some extra negotiation with the IdP, which can fail.
+    // The backend will set an "openid_error" url parameter when there is some failure.
+    if (urlParams.get('openid_error')) {
+      messages.push(
+        this.renderMessage(`Authentication failed: ${urlParams.get('openid_error')}`, 'danger', 'openid-err')
+      );
+    }
+
     return messages;
   };
 
@@ -183,32 +176,13 @@ export class LoginPage extends React.Component<LoginProps, LoginState> {
     let loginLabel = 'Log In';
     if (authenticationConfig.strategy === AuthStrategy.openshift) {
       loginLabel = 'Log In With OpenShift';
+    } else if (authenticationConfig.strategy === AuthStrategy.openid) {
+      loginLabel = 'Log In With OpenID';
     }
 
     const messages = this.getHelperMessage();
     const isLoggingIn = this.props.isPostLoginPerforming || this.props.status === LoginStatus.logging;
-    const isLoginButtonDisabled =
-      isLoggingIn || (this.props.postLoginErrorMsg !== undefined && this.props.postLoginErrorMsg.length !== 0);
-
-    const loginForm = (
-      <LoginForm
-        usernameLabel="Username"
-        showHelperText={this.state.showHelperText || this.props.message !== '' || messages.length > 0}
-        helperText={<>{messages}</>}
-        usernameValue={this.state.username}
-        onChangeUsername={this.handleUsernameChange}
-        isValidUsername={this.state.isValidUsername && this.props.status !== LoginStatus.error}
-        passwordLabel="Password"
-        passwordValue={this.state.password}
-        onChangePassword={this.handlePasswordChange}
-        isValidPassword={this.state.isValidPassword && this.props.status !== LoginStatus.error}
-        rememberMeAriaLabel="Remember me Checkbox"
-        onLoginButtonClick={(e: any) => this.handleSubmit(e)}
-        style={{ marginTop: '10px' }}
-        loginButtonLabel={isLoggingIn ? 'Logging in...' : undefined}
-        isLoginButtonDisabled={isLoginButtonDisabled}
-      />
-    );
+    const isLoginButtonDisabled = isLoggingIn || this.props.status === LoginStatus.loggedIn;
 
     const listItem = (
       <>
@@ -222,9 +196,7 @@ export class LoginPage extends React.Component<LoginProps, LoginState> {
     );
 
     let loginPane: React.ReactFragment;
-    if (authenticationConfig.strategy === AuthStrategy.login || authenticationConfig.strategy === AuthStrategy.ldap) {
-      loginPane = loginForm;
-    } else if (authenticationConfig.strategy === AuthStrategy.token) {
+    if (authenticationConfig.strategy === AuthStrategy.token) {
       loginPane = (
         <Form>
           <FormHelperText
@@ -251,19 +223,29 @@ export class LoginPage extends React.Component<LoginProps, LoginState> {
       );
     } else {
       loginPane = (
-        <Button onClick={this.handleSubmit} style={{ width: '100%' }} variant="primary">
-          {loginLabel}
-        </Button>
+        <Form>
+          <FormHelperText
+            isError={this.props.status === LoginStatus.error}
+            isHidden={this.props.status !== LoginStatus.error && this.props.message === '' && messages.length === 0}
+          >
+            {messages}
+          </FormHelperText>
+          <ActionGroup>
+            <Button type="submit" onClick={this.handleSubmit} style={{ width: '100%' }} variant="primary">
+              {loginLabel}
+            </Button>
+          </ActionGroup>
+        </Form>
       );
     }
 
     return (
       <LoginNext
-        footerListVariants="inline"
+        footerListVariants={ListVariant.inline}
         brandImgSrc={kialiLogo}
         brandImgAlt="Kiali logo"
         footerListItems={listItem}
-        textContent="Service Mesh Observability."
+        textContent="Service mesh management for Istio."
         loginTitle="Log in Kiali"
       >
         {loginPane}
@@ -278,12 +260,8 @@ const mapStateToProps = (state: KialiAppState) => ({
 });
 
 const mapDispatchToProps = (dispatch: ThunkDispatch<KialiAppState, void, KialiAppAction>) => ({
-  authenticate: (username: string, password: string) => dispatch(LoginThunkActions.authenticate(username, password)),
-  checkCredentials: () => dispatch(LoginThunkActions.checkCredentials())
+  authenticate: (username: string, password: string) => dispatch(LoginThunkActions.authenticate(username, password))
 });
 
-const LoginPageContainer = connect(
-  mapStateToProps,
-  mapDispatchToProps
-)(LoginPage);
+const LoginPageContainer = connect(mapStateToProps, mapDispatchToProps)(LoginPage);
 export default LoginPageContainer;

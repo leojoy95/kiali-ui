@@ -6,12 +6,13 @@ import { Dropdown, DropdownToggle, DropdownItem } from '@patternfly/react-core';
 import { QuestionCircleIcon } from '@patternfly/react-icons/';
 import { connect } from 'react-redux';
 import { isUpstream } from '../../UpstreamDetector/UpstreamDetector';
-import { Status, Component, StatusKey } from '../../../types/StatusState';
-import { config } from '../../../config';
+import { Status, ExternalServiceInfo, StatusKey } from '../../../types/StatusState';
+import { config, serverConfig } from '../../../config';
+import IstioCertsInfoConnected from 'components/IstioCertsInfo/IstioCertsInfo';
 
 type HelpDropdownProps = {
   status: Status;
-  components: Component[];
+  externalServices: ExternalServiceInfo[];
   warningMessages: string[];
 };
 
@@ -22,12 +23,14 @@ interface HelpDropdownState {
 class HelpDropdownContainer extends React.Component<HelpDropdownProps, HelpDropdownState> {
   about: React.RefObject<AboutUIModal>;
   debugInformation: React.RefObject<any>;
+  certsInformation: React.RefObject<any>;
 
   constructor(props: HelpDropdownProps) {
     super(props);
     this.state = { isDropdownOpen: false };
     this.about = React.createRef<AboutUIModal>();
     this.debugInformation = React.createRef();
+    this.certsInformation = React.createRef();
   }
 
   openAbout = () => {
@@ -37,6 +40,10 @@ class HelpDropdownContainer extends React.Component<HelpDropdownProps, HelpDropd
   openDebugInformation = () => {
     // Using wrapped component, so we have to get the wrappedInstance
     this.debugInformation.current!.open();
+  };
+
+  openCertsInformation = () => {
+    this.certsInformation.current!.open();
   };
 
   onDropdownToggle = isDropdownOpen => {
@@ -68,27 +75,46 @@ class HelpDropdownContainer extends React.Component<HelpDropdownProps, HelpDropd
     const { isDropdownOpen } = this.state;
 
     const Toggle = (
-      <DropdownToggle onToggle={this.onDropdownToggle} iconComponent={null}>
+      <DropdownToggle onToggle={this.onDropdownToggle} iconComponent={null} style={{ marginTop: 3 }}>
         <QuestionCircleIcon />
       </DropdownToggle>
     );
 
-    const items = [
+    const items: JSX.Element[] = [];
+
+    items.push(
       <DropdownItem component={'a'} key={'view_documentation'} href={this.buildDocumentationLink()} target="_blank">
         Documentation
-      </DropdownItem>,
+      </DropdownItem>
+    );
+
+    items.push(
       <DropdownItem component={'span'} key={'view_debug_info'} onClick={this.openDebugInformation}>
         View Debug Info
-      </DropdownItem>,
+      </DropdownItem>
+    );
+
+    if (serverConfig.kialiFeatureFlags.certificatesInformationIndicators.enabled) {
+      items.push(
+        <DropdownItem component={'span'} key={'view_certs_info'} onClick={this.openCertsInformation}>
+          View Certificates Info
+        </DropdownItem>
+      );
+    }
+
+    items.push(
       <DropdownItem component={'span'} key={'view_about_info'} onClick={this.openAbout}>
         About
       </DropdownItem>
-    ];
+    );
 
     return (
       <>
-        <AboutUIModal ref={this.about} status={this.props.status} components={this.props.components} />
+        <AboutUIModal ref={this.about} status={this.props.status} externalServices={this.props.externalServices} />
         <DebugInformationContainer ref={this.debugInformation} />
+        {serverConfig.kialiFeatureFlags.certificatesInformationIndicators.enabled && (
+          <IstioCertsInfoConnected ref={this.certsInformation} />
+        )}
         <Dropdown
           isPlain={true}
           position="right"
@@ -104,7 +130,7 @@ class HelpDropdownContainer extends React.Component<HelpDropdownProps, HelpDropd
 
 const mapStateToProps = (state: KialiAppState) => ({
   status: state.statusState.status,
-  components: state.statusState.components,
+  externalServices: state.statusState.externalServices,
   warningMessages: state.statusState.warningMessages
 });
 

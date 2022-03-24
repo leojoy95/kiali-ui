@@ -1,55 +1,64 @@
 import * as React from 'react';
 import { Button, ButtonVariant, Toolbar, ToolbarGroup, Tooltip, TooltipPosition } from '@patternfly/react-core';
 import { style } from 'typestyle';
-import * as _ from 'lodash';
 import { connect } from 'react-redux';
 import { ThunkDispatch } from 'redux-thunk';
 import { bindActionCreators } from 'redux';
 import { KialiAppState } from '../../../store/Store';
 import {
   activeNamespacesSelector,
-  edgeLabelModeSelector,
+  edgeLabelsSelector,
   graphTypeSelector,
-  showUnusedNodesSelector,
-  replayActiveSelector
+  showIdleNodesSelector,
+  replayActiveSelector,
+  trafficRatesSelector
 } from '../../../store/Selectors';
 import { GraphToolbarActions } from '../../../actions/GraphToolbarActions';
-import { GraphType, NodeParamsType, EdgeLabelMode } from '../../../types/Graph';
+import { GraphType, NodeParamsType, EdgeLabelMode, SummaryData, TrafficRate, RankMode } from '../../../types/Graph';
 import GraphFindContainer from './GraphFind';
 import GraphSettingsContainer from './GraphSettings';
 import history, { HistoryManager, URLParam } from '../../../app/History';
-import { ToolbarDropdown } from '../../../components/ToolbarDropdown/ToolbarDropdown';
 import Namespace, { namespacesFromString, namespacesToString } from '../../../types/Namespace';
 import { NamespaceActions } from '../../../actions/NamespaceAction';
 import { GraphActions } from '../../../actions/GraphActions';
 import { KialiAppAction } from '../../../actions/KialiAppAction';
 import { GraphTourStops } from 'pages/Graph/GraphHelpTour';
 import TourStopContainer from 'components/Tour/TourStop';
-import TimeControlsContainer from 'components/Time/TimeControls';
 import { KialiIcon, defaultIconStyle } from 'config/KialiIcon';
 import ReplayContainer from 'components/Time/Replay';
 import { UserSettingsActions } from 'actions/UserSettingsActions';
+import GraphSecondaryMasthead from './GraphSecondaryMasthead';
+import { CyNode } from 'components/CytoscapeGraph/CytoscapeGraphUtils';
+import { INITIAL_USER_SETTINGS_STATE } from 'reducers/UserSettingsState';
+import GraphResetContainer from './GraphReset';
 
 type ReduxProps = {
   activeNamespaces: Namespace[];
-  edgeLabelMode: EdgeLabelMode;
+  edgeLabels: EdgeLabelMode[];
   graphType: GraphType;
   node?: NodeParamsType;
+  rankBy: RankMode[];
   replayActive: boolean;
-  showUnusedNodes: boolean;
+  showIdleNodes: boolean;
+  summaryData: SummaryData | null;
+  trafficRates: TrafficRate[];
 
   setActiveNamespaces: (activeNamespaces: Namespace[]) => void;
-  setEdgeLabelMode: (edgeLabelMode: EdgeLabelMode) => void;
+  setEdgeLabels: (edgeLabels: EdgeLabelMode[]) => void;
   setGraphType: (graphType: GraphType) => void;
+  setIdleNodes: (idleNodes: boolean) => void;
   setNode: (node?: NodeParamsType) => void;
-  setShowUnusedNodes: (unusedNodes: boolean) => void;
+  setRankBy: (rankLabels: RankMode[]) => void;
+  setTrafficRates: (rates: TrafficRate[]) => void;
   toggleReplayActive: () => void;
 };
 
 type GraphToolbarProps = ReduxProps & {
+  cy: any;
   disabled: boolean;
-  onRefresh?: () => void;
+  elementsChanged: boolean;
   onToggleHelp: () => void;
+  onRefresh?: () => void;
 };
 
 const toolbarStyle = style({
@@ -61,46 +70,54 @@ const rightToolbarStyle = style({
   marginLeft: 'auto'
 });
 
-const marginLeftRight = style({
-  margin: '0 10px 0 10px'
-});
-
 export class GraphToolbar extends React.PureComponent<GraphToolbarProps> {
-  /**
-   *  Key-value pair object representation of GraphType enum.  Values are human-readable versions of enum keys.
-   *
-   *  Example:  GraphType => {'APP': 'App', 'VERSIONED_APP': 'VersionedApp'}
-   */
-  static readonly GRAPH_TYPES = _.mapValues(GraphType, val => `${_.capitalize(_.startCase(val))} graph`);
-
-  /**
-   *  Key-value pair object representation of EdgeLabelMode
-   *
-   *  Example:  EdgeLabelMode =>{'TRAFFIC_RATE_PER_SECOND': 'TrafficRatePerSecond'}
-   */
-  static readonly EDGE_LABEL_MODES = _.mapValues(_.omitBy(EdgeLabelMode, _.isFunction), val =>
-    _.capitalize(_.startCase(val as EdgeLabelMode))
-  );
-
   static contextTypes = {
     router: () => null
   };
 
   constructor(props: GraphToolbarProps) {
     super(props);
-    // Let URL override current redux state at construction time. Update URL with unset params.
+    // Let URL override current redux state at construction time. Update URL as needed.
     const urlParams = new URLSearchParams(history.location.search);
-    const urlEdgeLabelMode = HistoryManager.getParam(URLParam.GRAPH_EDGES, urlParams) as EdgeLabelMode;
-    if (urlEdgeLabelMode) {
-      if (urlEdgeLabelMode !== props.edgeLabelMode) {
-        props.setEdgeLabelMode(urlEdgeLabelMode);
+
+    const urlEdgeLabels = HistoryManager.getParam(URLParam.GRAPH_EDGE_LABEL, urlParams);
+    if (!!urlEdgeLabels) {
+      if (urlEdgeLabels !== props.edgeLabels.join(',')) {
+        props.setEdgeLabels(urlEdgeLabels.split(',') as EdgeLabelMode[]);
       }
-    } else {
-      HistoryManager.setParam(URLParam.GRAPH_EDGES, String(this.props.edgeLabelMode));
+    } else if (props.setEdgeLabels.length > 0) {
+      HistoryManager.setParam(URLParam.GRAPH_EDGE_LABEL, props.edgeLabels.join(','));
+    }
+
+    const urlRankLabels = HistoryManager.getParam(URLParam.GRAPH_RANK_BY, urlParams);
+    if (!!urlRankLabels) {
+      if (urlRankLabels !== props.rankBy.join(',')) {
+        props.setRankBy(urlRankLabels.split(',') as RankMode[]);
+      }
+    } else if (props.setRankBy.length > 0) {
+      HistoryManager.setParam(URLParam.GRAPH_RANK_BY, props.rankBy.join(','));
+    }
+
+    const urlReplayActive = HistoryManager.getBooleanParam(URLParam.GRAPH_REPLAY_ACTIVE);
+    if (urlReplayActive !== undefined) {
+      if (urlReplayActive !== this.props.replayActive) {
+        this.props.toggleReplayActive();
+      }
+    } else if (this.props.replayActive !== INITIAL_USER_SETTINGS_STATE.replayActive) {
+      HistoryManager.setParam(URLParam.GRAPH_REPLAY_ACTIVE, String(this.props.replayActive));
+    }
+
+    const urlGraphTraffic = HistoryManager.getParam(URLParam.GRAPH_TRAFFIC, urlParams);
+    if (!!urlGraphTraffic) {
+      if (urlGraphTraffic !== props.trafficRates.join(',')) {
+        props.setTrafficRates(urlGraphTraffic.split(',') as TrafficRate[]);
+      }
+    } else if (props.trafficRates.length > 0) {
+      HistoryManager.setParam(URLParam.GRAPH_TRAFFIC, props.trafficRates.join(','));
     }
 
     const urlGraphType = HistoryManager.getParam(URLParam.GRAPH_TYPE, urlParams) as GraphType;
-    if (urlGraphType) {
+    if (!!urlGraphType) {
       if (urlGraphType !== props.graphType) {
         props.setGraphType(urlGraphType);
       }
@@ -109,36 +126,48 @@ export class GraphToolbar extends React.PureComponent<GraphToolbarProps> {
     }
 
     const urlNamespaces = HistoryManager.getParam(URLParam.NAMESPACES, urlParams);
-    if (urlNamespaces) {
+    if (!!urlNamespaces) {
       if (urlNamespaces !== namespacesToString(props.activeNamespaces)) {
         props.setActiveNamespaces(namespacesFromString(urlNamespaces));
       }
-    } else {
-      const activeNamespacesString = namespacesToString(props.activeNamespaces);
-      HistoryManager.setParam(URLParam.NAMESPACES, activeNamespacesString);
-    }
-
-    const unusedNodes = HistoryManager.getBooleanParam(URLParam.UNUSED_NODES);
-    if (unusedNodes !== undefined) {
-      if (props.showUnusedNodes !== unusedNodes) {
-        props.setShowUnusedNodes(unusedNodes);
-      }
-    } else {
-      HistoryManager.setParam(URLParam.UNUSED_NODES, String(this.props.showUnusedNodes));
+    } else if (props.activeNamespaces.length > 0) {
+      HistoryManager.setParam(URLParam.NAMESPACES, namespacesToString(props.activeNamespaces));
     }
   }
 
   componentDidUpdate() {
     // ensure redux state and URL are aligned
-    const activeNamespacesString = namespacesToString(this.props.activeNamespaces);
-    if (this.props.activeNamespaces.length === 0) {
+    if (this.props.edgeLabels?.length === 0) {
+      HistoryManager.deleteParam(URLParam.GRAPH_EDGE_LABEL, true);
+    } else {
+      HistoryManager.setParam(URLParam.GRAPH_EDGE_LABEL, String(this.props.edgeLabels));
+    }
+
+    if (this.props.rankBy?.length === 0) {
+      HistoryManager.deleteParam(URLParam.GRAPH_RANK_BY, true);
+    } else {
+      HistoryManager.setParam(URLParam.GRAPH_RANK_BY, String(this.props.rankBy));
+    }
+
+    if (this.props.activeNamespaces?.length === 0) {
       HistoryManager.deleteParam(URLParam.NAMESPACES, true);
     } else {
-      HistoryManager.setParam(URLParam.NAMESPACES, activeNamespacesString);
+      HistoryManager.setParam(URLParam.NAMESPACES, namespacesToString(this.props.activeNamespaces));
     }
-    HistoryManager.setParam(URLParam.GRAPH_EDGES, String(this.props.edgeLabelMode));
+
+    if (this.props.replayActive === INITIAL_USER_SETTINGS_STATE.replayActive) {
+      HistoryManager.deleteParam(URLParam.GRAPH_REPLAY_ACTIVE, true);
+    } else {
+      HistoryManager.setParam(URLParam.GRAPH_REPLAY_ACTIVE, String(this.props.replayActive));
+    }
+
+    if (this.props.trafficRates?.length === 0) {
+      HistoryManager.deleteParam(URLParam.GRAPH_TRAFFIC, true);
+    } else {
+      HistoryManager.setParam(URLParam.GRAPH_TRAFFIC, String(this.props.trafficRates));
+    }
+
     HistoryManager.setParam(URLParam.GRAPH_TYPE, String(this.props.graphType));
-    HistoryManager.setParam(URLParam.UNUSED_NODES, String(this.props.showUnusedNodes));
   }
 
   componentWillUnmount() {
@@ -148,129 +177,99 @@ export class GraphToolbar extends React.PureComponent<GraphToolbarProps> {
     }
   }
 
-  handleRefresh = () => {
+  render() {
+    return (
+      <>
+        <GraphSecondaryMasthead
+          disabled={this.props.disabled}
+          graphType={this.props.graphType}
+          isNodeGraph={!!this.props.node}
+          onToggleHelp={this.props.onToggleHelp}
+          onGraphTypeChange={this.props.setGraphType}
+          onHandleRefresh={this.handleRefresh}
+        />
+        <Toolbar className={toolbarStyle}>
+          <div style={{ display: 'flex' }}>
+            {this.props.node && (
+              <Tooltip key={'graph-tour-help-ot'} position={TooltipPosition.right} content={'Back to full graph'}>
+                <Button variant={ButtonVariant.link} onClick={this.handleNamespaceReturn}>
+                  <KialiIcon.Back className={defaultIconStyle} />
+                </Button>
+              </Tooltip>
+            )}
+            <TourStopContainer info={GraphTourStops.Display}>
+              <GraphSettingsContainer graphType={this.props.graphType} disabled={this.props.disabled} />
+            </TourStopContainer>
+          </div>
+          <GraphFindContainer cy={this.props.cy} elementsChanged={this.props.elementsChanged} />
+
+          <TourStopContainer info={GraphTourStops.Shortcuts}>
+            <ToolbarGroup className={rightToolbarStyle} aria-label="graph_refresh_toolbar">
+              <Tooltip key={'graph-tour-help-ot'} position={TooltipPosition.right} content="Shortcuts and tips...">
+                <Button
+                  className={rightToolbarStyle}
+                  variant="link"
+                  style={{ paddingLeft: '6px', paddingRight: '0px' }}
+                  onClick={this.props.onToggleHelp}
+                >
+                  <KialiIcon.Help className={defaultIconStyle} />
+                </Button>
+              </Tooltip>
+              <GraphResetContainer />
+            </ToolbarGroup>
+          </TourStopContainer>
+        </Toolbar>
+        {this.props.replayActive && <ReplayContainer id="time-range-replay" />}
+      </>
+    );
+  }
+
+  private handleRefresh = () => {
     if (this.props.onRefresh) {
       this.props.onRefresh();
     }
   };
 
-  handleNamespaceReturn = () => {
+  private handleNamespaceReturn = () => {
+    if (
+      !this.props.summaryData ||
+      (this.props.summaryData.summaryType !== 'node' && this.props.summaryData.summaryType !== 'box')
+    ) {
+      history.push(`/graph/namespaces`);
+      return;
+    }
+
+    const selector = `node[id = "${this.props.summaryData!.summaryTarget.data(CyNode.id)}"]`;
     this.props.setNode(undefined);
-    history.push('/graph/namespaces');
-  };
-
-  // TODO [jshaughn] Is there a better typescript way than the style attribute with the spread syntax (here and other places)
-  render() {
-    const graphTypeKey: string = _.findKey(GraphType, val => val === this.props.graphType)!;
-    const edgeLabelModeKey: string = _.findKey(EdgeLabelMode, val => val === this.props.edgeLabelMode)!;
-    return (
-      <>
-        <Toolbar className={toolbarStyle}>
-          <div style={{ display: 'flex' }}>
-            {this.props.node ? (
-              <Tooltip
-                key={'graph-tour-help-ot'}
-                position={TooltipPosition.right}
-                content={`Back to full ${GraphToolbar.GRAPH_TYPES[graphTypeKey]}`}
-              >
-                <Button variant={ButtonVariant.link} onClick={this.handleNamespaceReturn}>
-                  <KialiIcon.Back className={defaultIconStyle} />
-                </Button>
-              </Tooltip>
-            ) : (
-              <>
-                <TourStopContainer info={GraphTourStops.GraphType}>
-                  <ToolbarDropdown
-                    id={'graph_filter_view_type'}
-                    disabled={this.props.disabled}
-                    handleSelect={this.setGraphType}
-                    value={graphTypeKey}
-                    label={GraphToolbar.GRAPH_TYPES[graphTypeKey]}
-                    options={GraphToolbar.GRAPH_TYPES}
-                  />
-                </TourStopContainer>
-                <Tooltip key={'graph-tour-help-ot'} position={TooltipPosition.right} content="Graph help tour...">
-                  <Button
-                    variant="link"
-                    style={{ paddingLeft: '6px', paddingRight: '0px' }}
-                    onClick={this.props.onToggleHelp}
-                  >
-                    <KialiIcon.Help className={defaultIconStyle} />
-                  </Button>
-                </Tooltip>
-              </>
-            )}
-            <div className={marginLeftRight}>
-              <TourStopContainer info={GraphTourStops.EdgeLabels}>
-                <ToolbarDropdown
-                  id={'graph_filter_edge_labels'}
-                  disabled={false}
-                  handleSelect={this.setEdgeLabelMode}
-                  value={edgeLabelModeKey}
-                  label={GraphToolbar.EDGE_LABEL_MODES[edgeLabelModeKey]}
-                  options={GraphToolbar.EDGE_LABEL_MODES}
-                />
-              </TourStopContainer>
-            </div>
-            <TourStopContainer info={GraphTourStops.Display}>
-              <GraphSettingsContainer edgeLabelMode={this.props.edgeLabelMode} graphType={this.props.graphType} />
-            </TourStopContainer>
-          </div>
-          <GraphFindContainer />
-          <ToolbarGroup className={rightToolbarStyle} aria-label="graph_refresh_toolbar">
-            <TourStopContainer info={GraphTourStops.TimeRange}>
-              <TimeControlsContainer
-                id="graph_time_range"
-                disabled={this.props.disabled}
-                handleRefresh={this.handleRefresh}
-                supportsReplay={true}
-              />
-            </TourStopContainer>
-          </ToolbarGroup>
-        </Toolbar>
-        {this.props.replayActive && <ReplayContainer id={'time-range-replay'} />}
-      </>
-    );
-  }
-
-  private setGraphType = (type: string) => {
-    const graphType: GraphType = GraphType[type] as GraphType;
-    if (this.props.graphType !== graphType) {
-      this.props.setGraphType(graphType);
-    }
-  };
-
-  private setEdgeLabelMode = (edgeMode: string) => {
-    const mode: EdgeLabelMode = EdgeLabelMode[edgeMode] as EdgeLabelMode;
-    if (this.props.edgeLabelMode !== mode) {
-      this.props.setEdgeLabelMode(mode);
-    }
+    history.push(`/graph/namespaces?focusSelector=${encodeURI(selector)}`);
   };
 }
 
 const mapStateToProps = (state: KialiAppState) => ({
   activeNamespaces: activeNamespacesSelector(state),
-  edgeLabelMode: edgeLabelModeSelector(state),
+  edgeLabels: edgeLabelsSelector(state),
   graphType: graphTypeSelector(state),
   node: state.graph.node,
+  rankBy: state.graph.toolbarState.rankBy,
   replayActive: replayActiveSelector(state),
-  showUnusedNodes: showUnusedNodesSelector(state)
+  showIdleNodes: showIdleNodesSelector(state),
+  summaryData: state.graph.summaryData,
+  trafficRates: trafficRatesSelector(state)
 });
 
 const mapDispatchToProps = (dispatch: ThunkDispatch<KialiAppState, void, KialiAppAction>) => {
   return {
     setActiveNamespaces: bindActionCreators(NamespaceActions.setActiveNamespaces, dispatch),
-    setEdgeLabelMode: bindActionCreators(GraphToolbarActions.setEdgelLabelMode, dispatch),
+    setEdgeLabels: bindActionCreators(GraphToolbarActions.setEdgeLabels, dispatch),
     setGraphType: bindActionCreators(GraphToolbarActions.setGraphType, dispatch),
+    setIdleNodes: bindActionCreators(GraphToolbarActions.setIdleNodes, dispatch),
     setNode: bindActionCreators(GraphActions.setNode, dispatch),
-    setShowUnusedNodes: bindActionCreators(GraphToolbarActions.setShowUnusedNodes, dispatch),
+    setRankBy: bindActionCreators(GraphToolbarActions.setRankBy, dispatch),
+    setTrafficRates: bindActionCreators(GraphToolbarActions.setTrafficRates, dispatch),
     toggleReplayActive: bindActionCreators(UserSettingsActions.toggleReplayActive, dispatch)
   };
 };
 
-const GraphToolbarContainer = connect(
-  mapStateToProps,
-  mapDispatchToProps
-)(GraphToolbar);
+const GraphToolbarContainer = connect(mapStateToProps, mapDispatchToProps)(GraphToolbar);
 
 export default GraphToolbarContainer;

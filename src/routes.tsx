@@ -8,12 +8,10 @@ import AppDetailsPage from './pages/AppDetails/AppDetailsPage';
 import OverviewPageContainer from './pages/Overview/OverviewPage';
 import { MenuItem, Path } from './types/Routes';
 import GraphPageContainer from './pages/Graph/GraphPage';
-import { icons, Paths } from './config';
+import { Paths } from './config';
 import ServiceDetailsPageContainer from './pages/ServiceDetails/ServiceDetailsPage';
-import DefaultSecondaryMasthead from './components/DefaultSecondaryMasthead/DefaultSecondaryMasthead';
 import IstioConfigNewPageContainer from './pages/IstioConfigNew/IstioConfigNewPage';
-import ThreeScaleHandlerListPage from './pages/extensions/threescale/ThreeScaleHandlerList/ThreeScaleHandlerListPage';
-import ThreeScaleHandlerDetailsPage from './pages/extensions/threescale/ThreeScaleHandlerDetails/ThreeScaleHandlerDetailsPage';
+import MeshPage from 'pages/Mesh/MeshPage';
 
 /**
  * Return array of objects that describe vertical menu
@@ -21,54 +19,42 @@ import ThreeScaleHandlerDetailsPage from './pages/extensions/threescale/ThreeSca
  */
 const navItems: MenuItem[] = [
   {
-    iconClass: icons.menu.overview,
     title: 'Overview',
     to: '/overview',
     pathsActive: [/^\/overview\/(.*)/]
   },
   {
-    iconClass: icons.menu.graph,
     title: 'Graph',
     to: '/graph/namespaces/',
     pathsActive: [/^\/graph\/(.*)/]
   },
   {
-    iconClass: icons.menu.applications,
     title: 'Applications',
     to: '/' + Paths.APPLICATIONS,
     pathsActive: [new RegExp('^/namespaces/(.*)/' + Paths.APPLICATIONS + '/(.*)')]
   },
   {
-    iconClass: icons.menu.workloads,
     title: 'Workloads',
     to: '/' + Paths.WORKLOADS,
     pathsActive: [new RegExp('^/namespaces/(.*)/' + Paths.WORKLOADS + '/(.*)')]
   },
   {
-    iconClass: icons.menu.services,
     title: 'Services',
     to: '/' + Paths.SERVICES,
     pathsActive: [new RegExp('^/namespaces/(.*)/' + Paths.SERVICES + '/(.*)')]
   },
   {
-    iconClass: icons.menu.istioConfig,
     title: 'Istio Config',
     to: '/' + Paths.ISTIO,
-    pathsActive: [new RegExp('^/namespaces/(.*)/' + Paths.ISTIO + '/(.*)'), new RegExp('/' + Paths.ISTIO + '/new')]
+    pathsActive: [new RegExp('^/namespaces/(.*)/' + Paths.ISTIO + '/(.*)'), new RegExp('/' + Paths.ISTIO + '/new/(.*)')]
   },
   {
-    iconClass: icons.menu.distributedTracing,
     title: 'Distributed Tracing',
     to: '/jaeger'
-  }
-];
-
-const extensionsItems: MenuItem[] = [
+  },
   {
-    iconClass: '',
-    title: '3scale Config',
-    to: '/extensions/threescale',
-    pathsActive: [/^\/extensions\/threescale/]
+    title: 'Mesh',
+    to: '/mesh'
   }
 ];
 
@@ -78,6 +64,10 @@ const pathRoutes: Path[] = [
   {
     path: '/overview',
     component: OverviewPageContainer
+  },
+  {
+    path: '/graph/node/namespaces/:namespace/' + Paths.AGGREGATES + '/:aggregate/:aggregateValue',
+    component: GraphPageContainer
   },
   {
     path: '/graph/node/namespaces/:namespace/' + Paths.APPLICATIONS + '/:app/versions/:version',
@@ -102,11 +92,6 @@ const pathRoutes: Path[] = [
   {
     path: '/namespaces/:namespace/' + Paths.SERVICES + '/:service',
     component: ServiceDetailsPageContainer
-  },
-  // NOTE that order on routes is important
-  {
-    path: '/namespaces/:namespace/' + Paths.ISTIO + '/:objectType/:objectSubtype/:object',
-    component: IstioConfigDetailsPage
   },
   {
     path: '/namespaces/:namespace/' + Paths.ISTIO + '/:objectType/:object',
@@ -133,7 +118,7 @@ const pathRoutes: Path[] = [
     component: WorkloadDetailsPage
   },
   {
-    path: '/' + Paths.ISTIO + '/new',
+    path: '/' + Paths.ISTIO + '/new/:objectType',
     component: IstioConfigNewPageContainer
   },
   {
@@ -143,50 +128,11 @@ const pathRoutes: Path[] = [
   {
     path: '/' + Paths.JAEGER,
     component: undefined
+  },
+  {
+    path: '/' + Paths.MESH,
+    component: MeshPage
   }
 ];
 
-const secondaryMastheadRoutes: Path[] = [
-  {
-    path: '/graph/namespaces',
-    component: DefaultSecondaryMasthead
-  },
-  {
-    path: '/' + Paths.APPLICATIONS,
-    component: DefaultSecondaryMasthead
-  },
-  {
-    path: '/' + Paths.SERVICES,
-    component: DefaultSecondaryMasthead
-  },
-  {
-    path: '/' + Paths.WORKLOADS,
-    component: DefaultSecondaryMasthead
-  },
-  {
-    path: '/' + Paths.ISTIO,
-    component: DefaultSecondaryMasthead
-  },
-  {
-    path: '/' + Paths.JAEGER,
-    component: DefaultSecondaryMasthead
-  }
-];
-
-const extensionsRoutes: Path[] = [
-  // Keep routes ordered with the more specific URLs first
-  {
-    path: '/extensions/threescale/new',
-    component: ThreeScaleHandlerDetailsPage
-  },
-  {
-    path: '/extensions/threescale/:handlerName',
-    component: ThreeScaleHandlerDetailsPage
-  },
-  {
-    path: '/extensions/threescale',
-    component: ThreeScaleHandlerListPage
-  }
-];
-
-export { defaultRoute, navItems, extensionsItems, pathRoutes, secondaryMastheadRoutes, extensionsRoutes };
+export { defaultRoute, navItems, pathRoutes };

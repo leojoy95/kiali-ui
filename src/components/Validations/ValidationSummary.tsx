@@ -1,12 +1,13 @@
 import * as React from 'react';
 import { CSSProperties } from 'react';
-import { ValidationTypes } from '../../types/IstioObjects';
+import { StatusCondition, ValidationTypes } from '../../types/IstioObjects';
 import { style } from 'typestyle';
 import { Text, TextVariants, Tooltip, TooltipPosition } from '@patternfly/react-core';
-import Validation, { severityToValidation } from './Validation';
+import Validation from './Validation';
 
 interface Props {
   id: string;
+  reconciledCondition?: StatusCondition;
   errors: number;
   warnings: number;
   objectCount?: number;
@@ -16,7 +17,7 @@ interface Props {
 const tooltipListStyle = style({
   textAlign: 'left',
   border: 0,
-  padding: '0 0 0 1em',
+  padding: '0 0 0 0',
   margin: '0 0 0 0'
 });
 
@@ -61,46 +62,36 @@ export class ValidationSummary extends React.PureComponent<Props> {
     return severity;
   }
 
-  tooltipSubtitle() {
-    const validation = severityToValidation[this.severity()];
-    let subtitle = validation.name;
-
-    if (this.props.objectCount) {
-      const plural = this.props.objectCount > 1 ? 's' : '';
-      subtitle = this.props.objectCount + ' object' + plural + ' analyzed';
-    }
-
-    return subtitle;
-  }
-
   tooltipNA() {
-    return <Text className={tooltipSentenceStyle}>No Istio configuration objects found in this namespace</Text>;
+    return <Text className={tooltipSentenceStyle}>No Istio config objects found</Text>;
   }
 
   tooltipNoValidationAvailable() {
-    return <Text className={tooltipListStyle}>No validation available for this type</Text>;
+    return <Text className={tooltipListStyle}>No Istio config validation available</Text>;
   }
 
   tooltipSummary() {
     return (
       <>
-        <Text style={{ textAlign: 'left', textEmphasis: 'strong' }} component={TextVariants.h4}>
-          Istio Config Validation
-        </Text>
-        <Text style={{ textAlign: 'left', textEmphasis: 'strong', paddingLeft: '1em' }} component={TextVariants.h5}>
-          {this.tooltipSubtitle()}
+        <Text style={{ textAlign: 'left', textEmphasis: 'strong' }} component={TextVariants.p}>
+          Istio config objects analyzed: {this.props.objectCount}
         </Text>
         <div className={tooltipListStyle}>
           {this.severitySummary().map(cat => (
             <div key={cat}>{cat}</div>
           ))}
         </div>
+        {this.props.reconciledCondition?.status && (
+          <Text style={{ textAlign: 'left', textEmphasis: 'strong' }} component={TextVariants.p}>
+            The object is reconciled
+          </Text>
+        )}
       </>
     );
   }
 
   tooltipContent() {
-    if (typeof this.props.objectCount !== undefined) {
+    if (this.props.objectCount !== undefined) {
       if (this.props.objectCount === 0) {
         return this.tooltipNA();
       } else {
@@ -112,10 +103,10 @@ export class ValidationSummary extends React.PureComponent<Props> {
   }
 
   tooltipBase() {
-    return typeof this.props.objectCount === 'undefined' || this.props.objectCount > 1 ? (
+    return this.props.objectCount === undefined || this.props.objectCount > 0 ? (
       <Validation iconStyle={this.props.style} severity={this.severity()} />
     ) : (
-      <small>N/A</small>
+      <div style={{ display: 'inline-block', marginLeft: '5px' }}>N/A</div>
     );
   }
 

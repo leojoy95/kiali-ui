@@ -1,9 +1,10 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
 exports[`#Labels render correctly with data should render badges with More labels link 1`] = `
-Array [
+<div
+  className="faowcuh"
+>
   <div
-    className=""
     key="label_0"
   >
     <Label
@@ -11,9 +12,8 @@ Array [
       name="app"
       value="bookinfo"
     />
-  </div>,
+  </div>
   <div
-    className=""
     key="label_1"
   >
     <Label
@@ -21,42 +21,23 @@ Array [
       name="version"
       value="v1"
     />
-  </div>,
-  <div
-    className="hide"
-    key="label_2"
-  >
-    <Label
-      key="label_2"
-      name="env"
-      value="prod"
-    />
-  </div>,
-  <div
-    className="hide"
-    key="label_3"
-  >
-    <Label
-      key="label_3"
-      name="team"
-      value="A"
-    />
-  </div>,
-  <a
-    className="fqiflux"
+  </div>
+  <Component
+    className="firjkjj"
     key="label_more"
     onClick={[Function]}
+    variant="link"
   >
-     
     More labels...
-  </a>,
-]
+  </Component>
+</div>
 `;
 
 exports[`#Labels render correctly with data should render badges without More labels link 1`] = `
-Array [
+<div
+  className="faowcuh"
+>
   <div
-    className=""
     key="label_0"
   >
     <Label
@@ -64,9 +45,8 @@ Array [
       name="app"
       value="bookinfo"
     />
-  </div>,
+  </div>
   <div
-    className=""
     key="label_1"
   >
     <Label
@@ -74,7 +54,6 @@ Array [
       name="version"
       value="v1"
     />
-  </div>,
-  "",
-]
+  </div>
+</div>
 `;

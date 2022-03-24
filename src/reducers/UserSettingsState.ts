@@ -7,11 +7,11 @@ import { UserSettingsActions } from '../actions/UserSettingsActions';
 
 export const INITIAL_USER_SETTINGS_STATE: UserSettings = {
   duration: config.toolbar.defaultDuration,
+  timeRange: config.toolbar.defaultTimeRange,
   interface: { navCollapse: false },
   refreshInterval: config.toolbar.defaultRefreshInterval,
   replayActive: false,
-  replayQueryTime: 0,
-  replayWindow: { interval: 0, startTime: 0 }
+  replayQueryTime: 0
 };
 
 const UserSettingsState = (state: UserSettings = INITIAL_USER_SETTINGS_STATE, action: KialiAppAction): UserSettings => {
@@ -34,16 +34,14 @@ const UserSettingsState = (state: UserSettings = INITIAL_USER_SETTINGS_STATE, ac
         replayQueryTime: action.payload
       });
     }
-    case getType(UserSettingsActions.setReplayWindow): {
+    case getType(UserSettingsActions.setTimeRange): {
       return updateState(state, {
-        replayWindow: action.payload,
-        replayQueryTime: 0
+        timeRange: action.payload
       });
     }
     case getType(UserSettingsActions.toggleReplayActive): {
       return updateState(state, {
         replayActive: !state.replayActive,
-        replayWindow: { interval: 0, startTime: 0 },
         replayQueryTime: 0
       });
     }

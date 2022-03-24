@@ -6,7 +6,7 @@ import { Nav, NavList, NavItem, PageSidebar } from '@patternfly/react-core';
 import { ExternalLinkAltIcon } from '@patternfly/react-icons';
 
 import history from '../../app/History';
-import { navItems, extensionsItems } from '../../routes';
+import { navItems } from '../../routes';
 import { serverConfig } from '../../config';
 
 const ExternalLink = ({ href, name }) => (
@@ -39,9 +39,18 @@ class Menu extends React.Component<MenuProps, MenuState> {
     };
   }
 
+  componentDidUpdate(prevProps: Readonly<MenuProps>) {
+    if (prevProps.isNavOpen !== this.props.isNavOpen) {
+      // Dispatch an extra "resize" event when side menu toggle to force that metrics charts resize
+      setTimeout(() => {
+        window.dispatchEvent(new Event('resize'));
+      }, 200);
+    }
+  }
+
   renderMenuItems = () => {
     const { location } = this.props;
-    const allNavItems = navItems.concat(extensionsItems);
+    const allNavItems = navItems;
     const activeItem = allNavItems.find(item => {
       let isRoute = matchPath(location.pathname, { path: item.to, exact: true, strict: false }) ? true : false;
       if (!isRoute && item.pathsActive) {
@@ -52,18 +61,17 @@ class Menu extends React.Component<MenuProps, MenuState> {
 
     return allNavItems
       .filter(item => {
-        // Extensions are conditionally rendered
-        if (item.title === '3scale Config') {
-          return serverConfig.extensions!.threescale.enabled;
+        if (item.title === 'Mesh') {
+          return serverConfig.clusterInfo?.name !== undefined;
         }
         return true;
       })
       .map(item => {
         if (item.title === 'Distributed Tracing') {
-          return this.props.jaegerUrl !== '' ? (
-            <ExternalLink key={item.to} href={this.props.jaegerUrl} name="Distributed Tracing" />
-          ) : (
-            ''
+          return (
+            this.props.jaegerUrl && (
+              <ExternalLink key={item.to} href={this.props.jaegerUrl} name="Distributed Tracing" />
+            )
           );
         }
 

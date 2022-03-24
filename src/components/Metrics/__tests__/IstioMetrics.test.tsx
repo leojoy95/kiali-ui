@@ -1,59 +1,38 @@
 import * as React from 'react';
-import { mount, shallow, ReactWrapper } from 'enzyme';
+import { shallow } from 'enzyme';
 import { Provider } from 'react-redux';
 import { MemoryRouter, Route } from 'react-router';
-import { DashboardModel, ChartModel } from '@kiali/k-charted-pf4';
 import { shallowToJson } from 'enzyme-to-json';
 
 import IstioMetrics from '../IstioMetrics';
 import * as API from '../../../services/Api';
 import { store } from '../../../store/ConfigStore';
 import { MetricsObjectTypes } from '../../../types/Metrics';
-import { GrafanaInfo } from 'types/GrafanaInfo';
+import MounterMocker from 'services/__mocks__/MounterMocker';
+import { ChartModel, DashboardModel } from 'types/Dashboards';
 
-let mounted: ReactWrapper<any, any> | null;
-
-const mockAPIToPromise = (func: keyof typeof API, obj: any): Promise<void> => {
-  return new Promise((resolve, reject) => {
-    jest.spyOn(API, func).mockImplementation(() => {
-      return new Promise(r => {
-        r({ data: obj });
-        setTimeout(() => {
-          try {
-            resolve();
-          } catch (e) {
-            reject(e);
-          }
-        }, 1);
-      });
-    });
+jest.spyOn(API, 'getGrafanaInfo').mockImplementation(() => {
+  return new Promise(r => {
+    r({ data: { externalLinks: [] } });
   });
-};
-
-const mockServiceDashboard = (dashboard: DashboardModel): Promise<void> => {
-  return mockAPIToPromise('getServiceDashboard', dashboard);
-};
-
-const mockWorkloadDashboard = (dashboard: DashboardModel): Promise<void> => {
-  return mockAPIToPromise('getWorkloadDashboard', dashboard);
-};
-
-const mockGrafanaInfo = (info: GrafanaInfo): Promise<any> => {
-  return mockAPIToPromise('getGrafanaInfo', info);
-};
+});
 
 const createMetricChart = (name: string): ChartModel => {
   return {
     name: name,
     unit: 'B',
     spans: 12,
-    metric: [
+    metrics: [
       {
-        labelSet: { __name__: name },
-        values: [[1111, 5], [2222, 10]],
-        name: ''
+        labels: {},
+        name: name,
+        datapoints: [
+          [1111, 5],
+          [2222, 10]
+        ]
       }
-    ]
+    ],
+    startCollapsed: false
   };
 };
 
@@ -62,51 +41,50 @@ const createHistogramChart = (name: string): ChartModel => {
     name: name,
     unit: 'B',
     spans: 12,
-    histogram: {
-      average: [
-        {
-          labelSet: { __name__: name },
-          values: [[1111, 10], [2222, 11]],
-          name: name
-        }
-      ],
-      median: [
-        {
-          labelSet: { __name__: name },
-          values: [[1111, 20], [2222, 21]],
-          name: name
-        }
-      ],
-      percentile95: [
-        {
-          labelSet: { __name__: name },
-          values: [[1111, 30], [2222, 31]],
-          name: name
-        }
-      ],
-      percentile99: [
-        {
-          labelSet: { __name__: name },
-          values: [[1111, 40], [2222, 41]],
-          name: name
-        }
-      ]
-    }
+    metrics: [
+      {
+        labels: {},
+        name: name,
+        stat: 'avg',
+        datapoints: [
+          [1111, 10],
+          [2222, 11]
+        ]
+      },
+      {
+        labels: {},
+        name: name,
+        stat: '0.5',
+        datapoints: [
+          [1111, 20],
+          [2222, 21]
+        ]
+      },
+      {
+        labels: {},
+        name: name,
+        stat: '0.95',
+        datapoints: [
+          [1111, 30],
+          [2222, 31]
+        ]
+      },
+      {
+        labels: {},
+        name: name,
+        stat: '0.99',
+        datapoints: [
+          [1111, 40],
+          [2222, 41]
+        ]
+      }
+    ],
+    startCollapsed: false
   };
 };
 
 describe('Metrics for a service', () => {
-  beforeEach(() => {
-    mounted = null;
-  });
-  afterEach(() => {
-    if (mounted) {
-      mounted.unmount();
-    }
-  });
-
   it('renders initial layout', () => {
-    mockGrafanaInfo({ externalLinks: [] });
     const wrapper = shallow(
       <Provider store={store}>
         <MemoryRouter>
@@ -128,84 +106,42 @@ describe('Metrics for a service', () => {
   });
 
   it('mounts and loads empty metrics', done => {
-    const allMocksDone = [
-      mockServiceDashboard({ title: 'foo', aggregations: [], charts: [], externalLinks: [] })
-        .then(() => {
-          mounted!.update();
-          expect(mounted!.find('GridItem')).toHaveLength(1);
-        })
-        .catch(err => done.fail(err))
-    ];
-    Promise.all(allMocksDone).then(() => done());
-    mounted = mount(
-      <Provider store={store}>
-        <MemoryRouter>
-          <Route
-            render={props => (
-              <IstioMetrics
-                {...props}
-                namespace="ns"
-                object="svc"
-                objectType={MetricsObjectTypes.SERVICE}
-                direction={'inbound'}
-              />
-            )}
-          />
-        </MemoryRouter>
-      </Provider>
-    );
+    const dashboard: DashboardModel = { title: 'foo', aggregations: [], charts: [], externalLinks: [], rows: 2 };
+    new MounterMocker()
+      .addMock('getServiceDashboard', dashboard)
+      .mountWithStore(
+        <IstioMetrics namespace="ns" object="svc" objectType={MetricsObjectTypes.SERVICE} direction={'inbound'} />
+      )
+      .run(done, wrapper => {
+        expect(wrapper.find('Chart')).toHaveLength(0);
+      });
   });
 
   it('mounts and loads full metrics', done => {
-    const allMocksDone = [
-      mockServiceDashboard({
-        title: 'foo',
-        aggregations: [],
-        charts: [
-          createMetricChart('m1'),
-          createHistogramChart('m3'),
-          createHistogramChart('m5'),
-          createHistogramChart('m7')
-        ],
-        externalLinks: []
-      })
-        .then(() => {
-          mounted!.update();
-          expect(mounted!.find('GridItem')).toHaveLength(5);
-        })
-        .catch(err => done.fail(err))
-    ];
-    Promise.all(allMocksDone).then(() => done());
-    mounted = mount(
-      <Provider store={store}>
-        <MemoryRouter>
-          <Route
-            render={props => (
-              <IstioMetrics
-                {...props}
-                namespace="ns"
-                object="svc"
-                objectType={MetricsObjectTypes.SERVICE}
-                direction={'inbound'}
-              />
-            )}
-          />
-        </MemoryRouter>
-      </Provider>
-    );
+    const dashboard: DashboardModel = {
+      title: 'foo',
+      aggregations: [],
+      charts: [
+        createMetricChart('m1'),
+        createHistogramChart('m3'),
+        createHistogramChart('m5'),
+        createHistogramChart('m7')
+      ],
+      externalLinks: [],
+      rows: 2
+    };
+    new MounterMocker()
+      .addMock('getServiceDashboard', dashboard)
+      .mountWithStore(
+        <IstioMetrics namespace="ns" object="svc" objectType={MetricsObjectTypes.SERVICE} direction={'inbound'} />
+      )
+      .run(done, wrapper => {
+        expect(wrapper.find('Chart')).toHaveLength(4);
+      });
   }, 10000); // Increase timeout for this test
 });
 
 describe('Inbound Metrics for a workload', () => {
-  beforeEach(() => {
-    mounted = null;
-  });
-  afterEach(() => {
-    if (mounted) {
-      mounted.unmount();
-    }
-  });
-
   it('renders initial layout', () => {
     const wrapper = shallow(
       <Provider store={store}>
@@ -226,70 +162,37 @@ describe('Inbound Metrics for a workload', () => {
   });
 
   it('mounts and loads empty metrics', done => {
-    const allMocksDone = [
-      mockWorkloadDashboard({ title: 'foo', aggregations: [], charts: [], externalLinks: [] })
-        .then(() => {
-          mounted!.update();
-          expect(mounted!.find('GridItem')).toHaveLength(1);
-        })
-        .catch(err => done.fail(err))
-    ];
-    Promise.all(allMocksDone).then(() => done());
-    mounted = mount(
-      <Provider store={store}>
-        <MemoryRouter>
-          <Route
-            render={props => (
-              <IstioMetrics
-                {...props}
-                namespace="ns"
-                object="svc"
-                objectType={MetricsObjectTypes.WORKLOAD}
-                direction={'inbound'}
-              />
-            )}
-          />
-        </MemoryRouter>
-      </Provider>
-    );
+    const dashboard: DashboardModel = { title: 'foo', aggregations: [], charts: [], externalLinks: [], rows: 2 };
+    new MounterMocker()
+      .addMock('getWorkloadDashboard', dashboard)
+      .mountWithStore(
+        <IstioMetrics namespace="ns" object="wkd" objectType={MetricsObjectTypes.WORKLOAD} direction={'inbound'} />
+      )
+      .run(done, wrapper => {
+        expect(wrapper.find('Chart')).toHaveLength(0);
+      });
   });
 
   it('mounts and loads full metrics', done => {
-    const allMocksDone = [
-      mockWorkloadDashboard({
-        title: 'foo',
-        aggregations: [],
-        charts: [
-          createMetricChart('m1'),
-          createHistogramChart('m3'),
-          createHistogramChart('m5'),
-          createHistogramChart('m7')
-        ],
-        externalLinks: []
-      })
-        .then(() => {
-          mounted!.update();
-          expect(mounted!.find('GridItem')).toHaveLength(5);
-        })
-        .catch(err => done.fail(err))
-    ];
-    Promise.all(allMocksDone).then(() => done());
-    mounted = mount(
-      <Provider store={store}>
-        <MemoryRouter>
-          <Route
-            render={props => (
-              <IstioMetrics
-                {...props}
-                namespace="ns"
-                object="svc"
-                objectType={MetricsObjectTypes.WORKLOAD}
-                direction={'inbound'}
-              />
-            )}
-          />
-        </MemoryRouter>
-      </Provider>
-    );
+    const dashboard: DashboardModel = {
+      title: 'foo',
+      aggregations: [],
+      charts: [
+        createMetricChart('m1'),
+        createHistogramChart('m3'),
+        createHistogramChart('m5'),
+        createHistogramChart('m7')
+      ],
+      externalLinks: [],
+      rows: 2
+    };
+    new MounterMocker()
+      .addMock('getWorkloadDashboard', dashboard)
+      .mountWithStore(
+        <IstioMetrics namespace="ns" object="wkd" objectType={MetricsObjectTypes.WORKLOAD} direction={'inbound'} />
+      )
+      .run(done, wrapper => {
+        expect(wrapper.find('Chart')).toHaveLength(4);
+      });
   }, 10000); // Increase timeout for this test
 });

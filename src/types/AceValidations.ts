@@ -1,15 +1,16 @@
-import { Annotation, Marker } from 'react-ace';
-import { ObjectCheck, ObjectValidation } from './IstioObjects';
+import { HelpMessage, ObjectCheck, ObjectValidation } from './IstioObjects';
+import { Annotation } from 'react-ace/types';
+import { IMarker } from 'react-ace';
 
 export const jsYaml = require('js-yaml');
 
 export interface AceValidations {
-  markers: Array<Marker>;
+  markers: Array<IMarker>;
   annotations: Array<Annotation>;
 }
 
 interface AceCheck {
-  marker: Marker;
+  marker: IMarker;
   annotation: Annotation;
 }
 
@@ -54,7 +55,7 @@ const posToRowCol = (yaml: string, pos: number): YamlPosition => {
   return rowCol;
 };
 
-const rowColToPos = (yaml: string, row: number, col: number): number => {
+export const rowColToPos = (yaml: string, row: number, col: number): number => {
   let currentRow = 0;
   let currentCol = 0;
   const pos = -1;
@@ -71,6 +72,48 @@ const rowColToPos = (yaml: string, row: number, col: number): number => {
     }
   }
   return pos;
+};
+
+export const parseLine = (yaml: string, row: number): string => {
+  let i = 0;
+  let j = 0;
+
+  for (i; i < yaml.length; i++) {
+    if (yaml.charAt(i) === '\n') {
+      j = j + 1;
+    }
+
+    if (j === row) break;
+  }
+
+  return yaml.substring(i + 1, yaml.indexOf('\n', i + 1));
+};
+
+export const parseHelpAnnotations = (yaml: string, helpMessages: HelpMessage[]): Annotation[] => {
+  let annotations: Annotation[] = [];
+  let lastPosition = -1;
+
+  helpMessages.forEach(hm => {
+    const marker = parseMarker(
+      yaml,
+      lastPosition,
+      hm.objectField.substring(hm.objectField.lastIndexOf('.') + 1),
+      false
+    );
+
+    const annotation = {
+      row: marker.startRow,
+      column: marker.startCol,
+      type: 'info',
+      text: 'This field has help information. Check the side panel for more information.'
+    };
+
+    if (marker.position !== -1) {
+      annotations.push(annotation);
+    }
+  });
+
+  return annotations;
 };
 
 /*
@@ -155,19 +198,19 @@ const parseMarker = (
 
 const parseCheck = (yaml: string, check: ObjectCheck): AceCheck => {
   const severity = check.severity === 'error' || check.severity === 'warning' ? check.severity : 'info';
-  const marker = {
+  const marker: IMarker = {
     startRow: 0,
     startCol: 0,
     endRow: 0,
     endCol: 0,
     className: 'istio-validation-' + severity,
-    type: severity
+    type: 'fullLine'
   };
   const annotation = {
     row: 0,
     column: 0,
     type: severity,
-    text: check.message
+    text: (check.code ? check.code + ' ' : '') + check.message
   };
   let aceMarker = {
     startRow: 0,
@@ -208,10 +251,10 @@ const parseCheck = (yaml: string, check: ObjectCheck): AceCheck => {
 
   marker.startRow = aceMarker.startRow;
   marker.startCol = aceMarker.startCol;
-  marker.endRow = aceMarker.endRow;
+  // React Ace editor has a flip in the marker indexes
+  marker.endRow = aceMarker.endRow > 0 ? aceMarker.endRow - 1 : 0;
   marker.endCol = aceMarker.endCol;
   annotation.row = marker.startRow;
-
   return { marker: marker, annotation: annotation };
 };
 
@@ -250,7 +293,7 @@ export const parseYamlValidations = (yamlInput: string): AceValidations => {
       endRow: row + 1,
       endCol: 0,
       className: 'istio-validation-error',
-      type: 'error'
+      type: 'fullLine'
     });
     parsedValidations.annotations.push({
       row: row,

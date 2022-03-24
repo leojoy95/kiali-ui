@@ -1,17 +1,14 @@
 import Namespace from './Namespace';
-import { TimeInMilliseconds } from './Common';
-
-export interface CyData {
-  updateTimestamp: TimeInMilliseconds;
-  cyRef: any;
-}
+import { DurationInSeconds, TimeInSeconds } from './Common';
+import { Health } from './Health';
+import { HealthAnnotationType } from './HealthAnnotation';
 
 export interface Layout {
   name: string;
 }
 
 export const SUMMARY_PANEL_CHART_WIDTH = 250;
-export type SummaryType = 'graph' | 'node' | 'edge' | 'group';
+export type SummaryType = 'graph' | 'node' | 'edge' | 'box';
 export interface SummaryData {
   summaryType: SummaryType;
   summaryTarget: any;
@@ -25,21 +22,151 @@ export enum Protocol {
 
 export interface SummaryPanelPropType {
   data: SummaryData;
-  namespaces: Namespace[];
+  duration: DurationInSeconds;
   graphType: GraphType;
   injectServiceNodes: boolean;
-  queryTime: number;
-  duration: number;
-  step: number;
+  namespaces: Namespace[];
+  queryTime: TimeInSeconds;
   rateInterval: string;
+  step: number;
+  trafficRates: TrafficRate[];
+}
+
+export enum EdgeMode {
+  ALL = 'all',
+  NONE = 'none',
+  UNHEALTHY = 'unhealthy'
 }
 
 export enum EdgeLabelMode {
-  NONE = 'noEdgeLabels',
-  REQUESTS_PER_SECOND = 'requestsPerSecond',
-  REQUESTS_PERCENTAGE = 'requestsPercentage',
-  RESPONSE_TIME_95TH_PERCENTILE = 'responseTime'
+  RESPONSE_TIME_GROUP = 'responseTime',
+  RESPONSE_TIME_AVERAGE = 'avg',
+  RESPONSE_TIME_P50 = 'rt50',
+  RESPONSE_TIME_P95 = 'rt95',
+  RESPONSE_TIME_P99 = 'rt99',
+  THROUGHPUT_GROUP = 'throughput',
+  THROUGHPUT_REQUEST = 'throughputRequest',
+  THROUGHPUT_RESPONSE = 'throughputResponse',
+  TRAFFIC_DISTRIBUTION = 'trafficDistribution',
+  TRAFFIC_RATE = 'trafficRate'
 }
+
+export const isResponseTimeMode = (mode: EdgeLabelMode): boolean => {
+  return (
+    mode === EdgeLabelMode.RESPONSE_TIME_GROUP ||
+    mode === EdgeLabelMode.RESPONSE_TIME_AVERAGE ||
+    mode === EdgeLabelMode.RESPONSE_TIME_P50 ||
+    mode === EdgeLabelMode.RESPONSE_TIME_P95 ||
+    mode === EdgeLabelMode.RESPONSE_TIME_P99
+  );
+};
+
+export const isThroughputMode = (mode: EdgeLabelMode): boolean => {
+  return (
+    mode === EdgeLabelMode.THROUGHPUT_GROUP ||
+    mode === EdgeLabelMode.THROUGHPUT_REQUEST ||
+    mode === EdgeLabelMode.THROUGHPUT_RESPONSE
+  );
+};
+
+export enum RankMode {
+  RANK_BY_INBOUND_EDGES = 'inboundEdges',
+  RANK_BY_OUTBOUND_EDGES = 'outboundEdges'
+}
+
+export type RankResult = {
+  // Number of discrete rankings, N for the current scoring. N in [0..100]. 0 indicates no active rankings.
+  upperBound: number;
+};
+
+export const numLabels = (modes: EdgeLabelMode[]): number => {
+  return modes.filter(m => m !== EdgeLabelMode.RESPONSE_TIME_GROUP && m !== EdgeLabelMode.THROUGHPUT_GROUP).length;
+};
+
+export enum TrafficRate {
+  GRPC_GROUP = 'grpc',
+  GRPC_RECEIVED = 'grpcReceived', // response_messages
+  GRPC_REQUEST = 'grpcRequest',
+  GRPC_SENT = 'grpcSent', // request_messages
+  GRPC_TOTAL = 'grpcTotal', // sent_bytes + received_bytes
+  HTTP_GROUP = 'http',
+  HTTP_REQUEST = 'httpRequest',
+  TCP_GROUP = 'tcp',
+  TCP_RECEIVED = 'tcpReceived', // received_bytes
+  TCP_SENT = 'tcpSent', // sent_bytes
+  TCP_TOTAL = 'tcpTotal' // sent_bytes + received_bytes
+}
+
+export const DefaultTrafficRates: TrafficRate[] = [
+  TrafficRate.GRPC_GROUP,
+  TrafficRate.GRPC_REQUEST,
+  TrafficRate.HTTP_GROUP,
+  TrafficRate.HTTP_REQUEST,
+  TrafficRate.TCP_GROUP,
+  TrafficRate.TCP_SENT
+];
+
+export const isGrpcRate = (rate: TrafficRate): boolean => {
+  return (
+    rate === TrafficRate.GRPC_GROUP ||
+    rate === TrafficRate.GRPC_RECEIVED ||
+    rate === TrafficRate.GRPC_REQUEST ||
+    rate === TrafficRate.GRPC_SENT ||
+    rate === TrafficRate.GRPC_TOTAL
+  );
+};
+
+export const toGrpcRate = (rate: string): TrafficRate | undefined => {
+  switch (rate) {
+    case 'received':
+      return TrafficRate.GRPC_RECEIVED;
+    case 'requests':
+    case 'request':
+      return TrafficRate.GRPC_REQUEST;
+    case 'sent':
+      return TrafficRate.GRPC_SENT;
+    case 'total':
+      return TrafficRate.GRPC_TOTAL;
+    default:
+      return undefined;
+  }
+};
+
+export const isHttpRate = (rate: TrafficRate): boolean => {
+  return rate === TrafficRate.HTTP_GROUP || rate === TrafficRate.HTTP_REQUEST;
+};
+
+export const toHttpRate = (rate: string): TrafficRate | undefined => {
+  switch (rate) {
+    case 'requests':
+    case 'request':
+      return TrafficRate.HTTP_REQUEST;
+    default:
+      return undefined;
+  }
+};
+
+export const isTcpRate = (rate: TrafficRate): boolean => {
+  return (
+    rate === TrafficRate.TCP_GROUP ||
+    rate === TrafficRate.TCP_RECEIVED ||
+    rate === TrafficRate.TCP_SENT ||
+    rate === TrafficRate.TCP_TOTAL
+  );
+};
+
+export const toTcpRate = (rate: string): TrafficRate | undefined => {
+  switch (rate) {
+    case 'received':
+      return TrafficRate.TCP_RECEIVED;
+    case 'sent':
+      return TrafficRate.TCP_SENT;
+    case 'total':
+      return TrafficRate.TCP_TOTAL;
+    default:
+      return undefined;
+  }
+};
 
 export enum GraphType {
   APP = 'app',
@@ -48,27 +175,32 @@ export enum GraphType {
   WORKLOAD = 'workload'
 }
 
-export enum GroupByType {
+export enum BoxByType {
   APP = 'app',
-  NONE = 'none',
-  VERSION = 'version'
+  CLUSTER = 'cluster',
+  NAMESPACE = 'namespace'
 }
 
 export enum NodeType {
+  AGGREGATE = 'aggregate',
   APP = 'app',
+  BOX = 'box',
   SERVICE = 'service',
   UNKNOWN = 'unknown',
   WORKLOAD = 'workload'
 }
 
+export const CLUSTER_DEFAULT = 'Kubernetes'; // Istio default cluster, typically indicates a single-cluster env
 export const UNKNOWN = 'unknown';
 
 export interface NodeParamsType {
+  aggregate?: string;
+  aggregateValue?: string;
   app: string;
   namespace: Namespace;
   nodeType: NodeType;
   service: string;
-  version: string;
+  version?: string;
   workload: string;
 }
 
@@ -78,14 +210,14 @@ export interface NodeParamsType {
 export const CytoscapeGlobalScratchNamespace = '_global';
 export type CytoscapeGlobalScratchData = {
   activeNamespaces: Namespace[];
-  edgeLabelMode: EdgeLabelMode;
+  edgeLabels: EdgeLabelMode[];
+  forceLabels: boolean;
   graphType: GraphType;
-  mtlsEnabled: boolean;
-  showCircuitBreakers: boolean;
+  homeCluster: string;
   showMissingSidecars: boolean;
   showSecurity: boolean;
-  showNodeLabels: boolean;
   showVirtualServices: boolean;
+  trafficRates: TrafficRate[];
 };
 
 export interface CytoscapeBaseEvent {
@@ -93,9 +225,7 @@ export interface CytoscapeBaseEvent {
   summaryTarget: any; // the cytoscape element that was the target of the event
 }
 
-export interface CytoscapeClickEvent extends CytoscapeBaseEvent {}
-export interface CytoscapeMouseInEvent extends CytoscapeBaseEvent {}
-export interface CytoscapeMouseOutEvent extends CytoscapeBaseEvent {}
+export interface CytoscapeEvent extends CytoscapeBaseEvent {}
 
 // Graph Structures
 
@@ -158,29 +288,118 @@ export const hasProtocolTraffic = (protocolTraffic: ProtocolTraffic): protocolTr
   );
 };
 
+export const prettyProtocol = (protocol: ValidProtocols): string => {
+  switch (protocol.toLowerCase()) {
+    case 'http':
+      return 'HTTP';
+    case 'tcp':
+      return 'TCP';
+    default:
+      return 'gRPC';
+  }
+};
+
+export interface DestService {
+  cluster: string;
+  namespace: string;
+  name: string;
+}
+
+export interface DestService {
+  cluster: string;
+  namespace: string;
+  name: string;
+}
+
+export interface SEInfo {
+  hosts: string[];
+  location: string;
+  namespace: string; // namespace represents where the ServiceEntry object is defined and not necessarily the namespace of the node.
+}
+
+export interface WEInfo {
+  name: string;
+}
+
+export interface GraphRequestsHealth {
+  inbound: { [idx: string]: { [idx: string]: number } };
+  outbound: { [idx: string]: { [idx: string]: number } };
+  healthAnnotations: { [idx: string]: string };
+}
+
+export interface GraphWorkloadStatus {
+  name: string;
+  desiredReplicas: number;
+  currentReplicas: number;
+  availableReplicas: number
+  syncedProxies: number
+}
+
+export interface GraphNodeAppHealth {
+  workloadStatuses: GraphWorkloadStatus[];
+  requests: GraphRequestsHealth;
+}
+
+export interface GraphNodeWorkloadHealth {
+  workloadStatus: GraphWorkloadStatus;
+  requests: GraphRequestsHealth;
+}
+
+export interface GraphNodeServiceHealth {
+  requests: GraphRequestsHealth;
+}
+
+export type GraphNodeHealthData = GraphNodeAppHealth | GraphNodeWorkloadHealth | GraphNodeServiceHealth | [] | null;
+
 // Node data expected from server
 export interface GraphNodeData {
+  // required
+  cluster: string;
   id: string;
-  parent?: string;
-  nodeType: NodeType;
   namespace: string;
-  workload?: string;
+  nodeType: NodeType;
+
+  // optional
+  aggregate?: string;
+  aggregateValue?: string;
   app?: string;
-  version?: string;
-  service?: string;
-  destServices?: any;
-  traffic?: ProtocolTraffic[];
+  destServices?: DestService[];
   hasCB?: boolean;
+  hasFaultInjection?: boolean;
+  hasHealthConfig?: HealthAnnotationType;
+  hasMirroring?: boolean;
   hasMissingSC?: boolean;
-  hasVS?: boolean;
+  hasRequestRouting?: boolean;
+  hasRequestTimeout?: boolean;
+  hasTCPTrafficShifting?: boolean;
+  hasTrafficShifting?: boolean;
+  hasVS?: {
+    hostnames?: string[];
+  };
+  hasWorkloadEntry?: WEInfo[];
+  healthData?: GraphNodeHealthData;
+  isBox?: string;
   isDead?: boolean;
-  isGroup?: string;
+  isIdle?: boolean;
   isInaccessible?: boolean;
+  isGateway?: {
+    ingressInfo?: {
+      hostnames?: string[];
+    };
+    egressInfo?: {
+      hostnames?: string[];
+    };
+  };
   isMisconfigured?: string;
   isOutside?: boolean;
   isRoot?: boolean;
-  isServiceEntry?: string;
-  isUnused?: boolean;
+  isServiceEntry?: SEInfo;
+  labels?: { [key: string]: string };
+  parent?: string;
+  service?: string;
+  traffic?: ProtocolTraffic[];
+  version?: string;
+  workload?: string;
 }
 
 // Edge data expected from server
@@ -188,8 +407,10 @@ export interface GraphEdgeData {
   id: string;
   source: string;
   target: string;
-  traffic?: ProtocolTraffic;
+  destPrincipal?: string;
   responseTime?: number;
+  sourcePrincipal?: string;
+  traffic?: ProtocolTraffic;
   isMTLS?: number;
 }
 
@@ -217,46 +438,61 @@ export interface GraphDefinition {
 export interface DecoratedGraphNodeData extends GraphNodeData {
   grpcIn: number;
   grpcInErr: number;
+  grpcInNoResponse: number;
   grpcOut: number;
+  health: Health;
+  healthStatus: string; // status name
   httpIn: number;
   httpIn3xx: number;
   httpIn4xx: number;
   httpIn5xx: number;
+  httpInNoResponse: number;
   httpOut: number;
   tcpIn: number;
   tcpOut: number;
 
   traffic: never;
 
-  // computed, true if has istio namespace
+  // computed values...
+
+  // true if has istio namespace
   isIstio?: boolean;
+  // assigned when node ranking is enabled. relative importance from most to least important [1..100]. Multiple nodes can have same rank.
+  rank?: number;
 }
 
 // Edge data after decorating at fetch-time (what is mainly used by ui code)
 export interface DecoratedGraphEdgeData extends GraphEdgeData {
   grpc: number;
   grpcErr: number;
+  grpcNoResponse: number;
   grpcPercentErr: number;
   grpcPercentReq: number;
   http: number;
   http3xx: number;
   http4xx: number;
   http5xx: number;
+  httpNoResponse: number;
   httpPercentErr: number;
   httpPercentReq: number;
+  protocol: ValidProtocols;
   responses: Responses;
   tcp: number;
-  protocol: ValidProtocols;
 
   // During the decoration process, we make non-optional some number attributes (giving them a default value)
-  // Default value NaN
-  responseTime: number;
-
-  // Default value -1
-  isMTLS: number;
-
   // computed, true if traffic rate > 0
   hasTraffic?: boolean;
+  // Default value -1
+  isMTLS: number;
+  // Default value NaN
+  responseTime: number;
+  // Default value NaN
+  throughput: number;
+
+  // computed values...
+
+  // assigned when graph is updated, the edge health depends on the node health, traffic, and config
+  healthStatus?: string; // status name
 }
 
 export interface DecoratedGraphNodeWrapper {

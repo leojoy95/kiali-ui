@@ -80,8 +80,15 @@ class UserDropdownConnected extends React.Component<UserProps, UserState> {
 
   handleLogout = () => {
     if (authenticationConfig.logoutEndpoint) {
-      API.logout();
-      (document.getElementById('openshiftlogout') as HTMLFormElement).submit();
+      API.logout()
+        .then(_ => {
+          (document.getElementById('openshiftlogout') as HTMLFormElement).submit();
+        })
+        .catch(error => {
+          const errorMsg = error.response && error.response.data.error ? error.response.data.error : error.message;
+          console.error(`Logout failed. "kiali-token" cookie may need to be cleared manually: ${errorMsg}`);
+          (document.getElementById('openshiftlogout') as HTMLFormElement).submit();
+        });
     } else {
       this.props.logout();
     }
@@ -106,10 +113,11 @@ class UserDropdownConnected extends React.Component<UserProps, UserState> {
 
   render() {
     const { isDropdownOpen } = this.state;
-    const isAnonymous = authenticationConfig.strategy === AuthStrategy.anonymous;
+    const canLogout = authenticationConfig.strategy !== AuthStrategy.anonymous &&
+      authenticationConfig.strategy !== AuthStrategy.header;
 
     const userDropdownItems = (
-      <DropdownItem key={'user_logout_option'} onClick={this.handleLogout} isDisabled={isAnonymous}>
+      <DropdownItem key={'user_logout_option'} onClick={this.handleLogout} isDisabled={!canLogout}>
         Logout
       </DropdownItem>
     );
@@ -122,7 +130,10 @@ class UserDropdownConnected extends React.Component<UserProps, UserState> {
           show={this.state.showSessionTimeOut && !this.state.isSessionTimeoutDismissed}
           timeOutCountDown={this.state.timeCountDownSeconds}
         />
-        {this.props.session && (
+        {this.props.session && !canLogout && (
+          <>{this.props.session.username}</>
+        )}
+        {this.props.session && canLogout && (
           <Dropdown
             isPlain={true}
             position="right"
@@ -156,13 +167,9 @@ const mapStateToProps = (state: KialiAppState) => ({
 
 const mapDispatchToProps = (dispatch: ThunkDispatch<KialiAppState, void, KialiAppAction>) => ({
   logout: () => dispatch(LoginThunkActions.logout()),
-  extendSession: (session: LoginSession) => dispatch(LoginThunkActions.extendSession(session)),
-  checkCredentials: () => dispatch(LoginThunkActions.checkCredentials())
+  extendSession: (session: LoginSession) => dispatch(LoginThunkActions.extendSession(session))
 });
 
-const UserDropdown = connect(
-  mapStateToProps,
-  mapDispatchToProps
-)(UserDropdownConnected);
+const UserDropdown = connect(mapStateToProps, mapDispatchToProps)(UserDropdownConnected);
 
 export default UserDropdown;

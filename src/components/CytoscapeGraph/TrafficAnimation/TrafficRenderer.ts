@@ -1,6 +1,6 @@
 import { Point, clamp, quadraticBezier, linearInterpolation, distance, bezierLength } from '../../../utils/MathUtils';
-import { DimClass } from '../graphs/GraphStyles';
-import { PfColors, getPFAlertColorVals } from '../../Pf/PfColors';
+import { UnhighlightClass, HoveredClass } from '../graphs/GraphStyles';
+import { PFColorVals } from '../../Pf/PfColors';
 import {
   TrafficPointCircleRenderer,
   TrafficPointConcentricDiamondRenderer,
@@ -9,28 +9,7 @@ import {
 } from './TrafficPointRenderer';
 import { decoratedEdgeData } from '../CytoscapeGraphUtils';
 import { Protocol } from '../../../types/Graph';
-
-const TCP_SETTINGS = {
-  baseSpeed: 0.5,
-  timer: {
-    max: 600,
-    min: 150
-  },
-  sentRate: {
-    min: 50,
-    max: 1024 * 1024
-  },
-  errorRate: 0
-};
-
-// Min and max values to clamp the request per second rate
-const TIMER_REQUEST_PER_SECOND_MIN = 0;
-const TIMER_REQUEST_PER_SECOND_MAX = 750;
-
-// Range of time to use between spawning a new dot.
-// At higher request per second rate, faster dot spawning.
-const TIMER_TIME_BETWEEN_DOTS_MIN = 20;
-const TIMER_TIME_BETWEEN_DOTS_MAX = 1000;
+import { timerConfig, tcpTimerConfig } from './AnimationTimerConfig';
 
 // Clamp response time from min to max
 const SPEED_RESPONSE_TIME_MIN = 0;
@@ -39,6 +18,8 @@ const SPEED_RESPONSE_TIME_MAX = 10000;
 // Speed to travel trough an edge
 const SPEED_RATE_MIN = 0.1;
 const SPEED_RATE_MAX = 2.0;
+
+const TCP_SPEED = 1;
 
 const BASE_LENGTH = 50;
 
@@ -63,10 +44,9 @@ enum TrafficEdgeType {
  * @returns {TrafficPointRenderer}
  */
 const getTrafficPointRendererForRpsError: (edge: any) => TrafficPointRenderer = (_edge: any) => {
-  const colorVals = getPFAlertColorVals();
   return new TrafficPointConcentricDiamondRenderer(
-    new Diamond(5, PfColors.White, colorVals.Danger, 1.0),
-    new Diamond(2, colorVals.Danger, colorVals.Danger, 1.0)
+    new Diamond(5, PFColorVals.White, PFColorVals.Danger, 1.0),
+    new Diamond(2, PFColorVals.Danger, PFColorVals.Danger, 1.0)
   );
 };
 
@@ -76,7 +56,7 @@ const getTrafficPointRendererForRpsError: (edge: any) => TrafficPointRenderer = 
  * @returns {TrafficPointRenderer}
  */
 const getTrafficPointRendererForRpsSuccess: (edge: any) => TrafficPointRenderer = (edge: any) => {
-  return new TrafficPointCircleRenderer(2, PfColors.White, edge.style('line-color'), 2);
+  return new TrafficPointCircleRenderer(2, PFColorVals.White, edge.style('line-color'), 2);
 };
 
 /**
@@ -85,7 +65,7 @@ const getTrafficPointRendererForRpsSuccess: (edge: any) => TrafficPointRenderer 
  * @returns {TrafficPointCircleRenderer}
  */
 const getTrafficPointRendererForTcp: (edge: any) => TrafficPointRenderer = (_edge: any) => {
-  return new TrafficPointCircleRenderer(1.6, PfColors.Black100, PfColors.Black500, 1);
+  return new TrafficPointCircleRenderer(1.6, PFColorVals.Black100, PFColorVals.Black500, 1);
 };
 
 /**
@@ -273,42 +253,42 @@ export default class TrafficRenderer {
   private trafficEdges: TrafficEdgeHash = {};
 
   private readonly layer;
-  private readonly canvas;
   private readonly context;
 
-  constructor(cy: any, edges: any) {
+  constructor(cy: any) {
     this.layer = cy.cyCanvas();
-    this.canvas = this.layer.getCanvas();
-    this.canvas.style['pointer-events'] = 'none';
-    this.context = this.canvas.getContext('2d');
-    this.setEdges(edges);
+    const canvas = this.layer.getCanvas();
+    canvas.style['pointer-events'] = 'none';
+    this.context = canvas.getContext('2d');
   }
 
   /**
    * Starts the rendering loop, discards any other rendering loop that was started
    */
-  start() {
-    this.stop();
+  start(edges: any) {
+    this.pause();
+    this.trafficEdges = this.processEdges(edges);
     this.animationTimer = window.setInterval(this.processStep, FRAME_RATE * 1000);
   }
 
   /**
    * Stops the rendering loop if any
    */
-  stop() {
-    if (this.animationTimer) {
+  pause() {
+    if (this.animationTimer !== undefined) {
       window.clearInterval(this.animationTimer);
+      this.layer.clear(this.context);
       this.animationTimer = undefined;
-      this.clear();
+      this.previousTimestamp = undefined;
     }
   }
 
-  setEdges(edges: any) {
-    this.trafficEdges = this.processEdges(edges);
-  }
-
-  clear() {
-    this.layer.clear(this.context);
+  /**
+   * Stops the rendering loop if any
+   */
+  stop() {
+    this.pause();
+    this.trafficEdges = {};
   }
 
   /**
@@ -317,10 +297,10 @@ export default class TrafficRenderer {
    */
   processStep = () => {
     try {
-      if (this.previousTimestamp === undefined) {
-        this.previousTimestamp = Date.now();
-      }
       const nextTimestamp = Date.now();
+      if (!this.previousTimestamp) {
+        this.previousTimestamp = nextTimestamp;
+      }
       const step = this.currentStep(nextTimestamp);
       this.layer.clear(this.context);
       this.layer.setTransform(this.context);
@@ -344,12 +324,12 @@ export default class TrafficRenderer {
   };
 
   /**
-   * Renders the points inside the TrafficEdge (unless is dimmed)
+   * Renders the points inside the TrafficEdge (unless unhighlighted)
    *
    */
   private render(trafficEdge: TrafficEdge) {
     const edge = trafficEdge.getEdge();
-    if (edge.hasClass(DimClass)) {
+    if (edge.hasClass(UnhighlightClass) || edge.hasClass(HoveredClass)) {
       return;
     }
     trafficEdge.getPoints().forEach((point: TrafficPoint) => {
@@ -417,6 +397,24 @@ export default class TrafficRenderer {
   }
 
   private processEdges(edges: any): TrafficEdgeHash {
+    timerConfig.resetCalibration();
+    tcpTimerConfig.resetCalibration();
+    // Calibrate animation amplitude
+    edges.forEach(edge => {
+      const edgeData = decoratedEdgeData(edge);
+      switch (edgeData.protocol) {
+        case Protocol.GRPC:
+          timerConfig.calibrate(edgeData.grpc);
+          break;
+        case Protocol.HTTP:
+          timerConfig.calibrate(edgeData.http);
+          break;
+        case Protocol.TCP:
+          tcpTimerConfig.calibrate(edgeData.tcp);
+          break;
+      }
+    });
+    // Process edges
     return edges.reduce((trafficEdges: TrafficEdgeHash, edge: any) => {
       const type = this.getTrafficEdgeType(edge);
       if (type !== TrafficEdgeType.NONE) {
@@ -443,9 +441,7 @@ export default class TrafficRenderer {
       edgeLengthFactor = BASE_LENGTH / Math.max(edgeLength, 1);
     } catch (error) {
       console.error(
-        `Error when finding the length of the edge for the traffic animation, this TrafficEdge won't be rendered: ${
-          error.message
-        }`
+        `Error when finding the length of the edge for the traffic animation, this TrafficEdge won't be rendered: ${error.message}`
       );
     }
 
@@ -455,7 +451,7 @@ export default class TrafficRenderer {
       const rate = isHttp ? edgeData.http : edgeData.grpc;
       const pErr = isHttp ? edgeData.httpPercentErr : edgeData.grpcPercentErr;
 
-      const timer = this.timerFromRate(rate);
+      const timer = timerConfig.computeDelay(rate);
       // The edge of the length also affects the speed, include a factor in the speed to even visual speed for
       // long and short edges.
       const speed = this.speedFromResponseTime(edgeData.responseTime) * edgeLengthFactor;
@@ -465,37 +461,11 @@ export default class TrafficRenderer {
       trafficEdge.setEdge(edge);
       trafficEdge.setErrorRate(errorRate);
     } else if (trafficEdge.getType() === TrafficEdgeType.TCP) {
-      trafficEdge.setSpeed(TCP_SETTINGS.baseSpeed * edgeLengthFactor);
-      trafficEdge.setErrorRate(TCP_SETTINGS.errorRate);
-      trafficEdge.setTimer(this.timerFromTcpSentRate(edgeData.tcp)); // 150 - 500
+      trafficEdge.setSpeed(TCP_SPEED * edgeLengthFactor);
+      trafficEdge.setErrorRate(0);
+      trafficEdge.setTimer(tcpTimerConfig.computeDelay(edgeData.tcp));
       trafficEdge.setEdge(edge);
     }
-  }
-
-  // see for easing functions https://gist.github.com/gre/1650294
-  private timerFromRate(rate: number) {
-    if (isNaN(rate) || rate === 0) {
-      return undefined;
-    }
-    // Normalize requests per second within a range
-    const delta =
-      clamp(rate, TIMER_REQUEST_PER_SECOND_MIN, TIMER_REQUEST_PER_SECOND_MAX) / TIMER_REQUEST_PER_SECOND_MAX;
-
-    // Invert and scale
-    return (
-      TIMER_TIME_BETWEEN_DOTS_MIN + Math.pow(1 - delta, 2) * (TIMER_TIME_BETWEEN_DOTS_MAX - TIMER_TIME_BETWEEN_DOTS_MIN)
-    );
-  }
-
-  private timerFromTcpSentRate(tcpSentRate: number) {
-    if (isNaN(tcpSentRate) || tcpSentRate === 0) {
-      return undefined;
-    }
-    // Normalize requests per second within a range
-    const delta = clamp(tcpSentRate, TCP_SETTINGS.sentRate.min, TCP_SETTINGS.sentRate.max) / TCP_SETTINGS.sentRate.max;
-
-    // Invert and scale
-    return TCP_SETTINGS.timer.min + Math.pow(1 - delta, 2) * (TCP_SETTINGS.timer.max - TCP_SETTINGS.timer.min);
   }
 
   private speedFromResponseTime(responseTime: number) {

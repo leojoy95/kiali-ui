@@ -16,6 +16,10 @@ const conf = {
     defaultDuration: 1 * UNIT_TIME.MINUTE,
     /** By default refresh is 15 seconds */
     defaultRefreshInterval: 15 * MILLISECONDS,
+    /** Time Range default in 10 minutes **/
+    defaultTimeRange: {
+      rangeDuration: 10 * UNIT_TIME.MINUTE
+    },
     /** Options in refresh */
     refreshInterval: {
       0: 'Pause',
@@ -28,9 +32,9 @@ const conf = {
     },
     /** Graphs layouts types */
     graphLayouts: {
-      cola: 'Cola',
-      'cose-bilkent': 'Cose',
-      dagre: 'Dagre'
+      'kiali-grid': 'Grid',
+      'kiali-concentric': 'Concentric',
+      'kiali-dagre': 'Dagre'
     }
   },
   /** About Tracing Configuration*/
@@ -87,6 +91,16 @@ const conf = {
   /** API configuration */
   api: {
     urls: {
+      aggregateGraphElements: (namespace: string, aggregate: string, aggregateValue: string) =>
+        `api/namespaces/${namespace}/aggregates/${aggregate}/${aggregateValue}/graph`,
+      aggregateByServiceGraphElements: (
+        namespace: string,
+        aggregate: string,
+        aggregateValue: string,
+        service: string
+      ) => `api/namespaces/${namespace}/aggregates/${aggregate}/${aggregateValue}/${service}/graph`,
+      aggregateMetrics: (namespace: string, aggregate: string, aggregateValue: string) =>
+        `api/namespaces/${namespace}/aggregates/${aggregate}/${aggregateValue}/metrics`,
       authenticate: 'api/authenticate',
       authInfo: 'api/auth/info',
       apps: (namespace: string) => `api/namespaces/${namespace}/apps`,
@@ -100,36 +114,43 @@ const conf = {
       appHealth: (namespace: string, app: string) => `api/namespaces/${namespace}/apps/${app}/health`,
       appMetrics: (namespace: string, app: string) => `api/namespaces/${namespace}/apps/${app}/metrics`,
       appDashboard: (namespace: string, app: string) => `api/namespaces/${namespace}/apps/${app}/dashboard`,
+      appSpans: (namespace: string, app: string) => `api/namespaces/${namespace}/apps/${app}/spans`,
+      clusters: 'api/clusters',
+      serviceSpans: (namespace: string, service: string) => `api/namespaces/${namespace}/services/${service}/spans`,
+      workloadSpans: (namespace: string, workload: string) => `api/namespaces/${namespace}/workloads/${workload}/spans`,
       customDashboard: (namespace: string, template: string) =>
         `api/namespaces/${namespace}/customdashboard/${template}`,
       grafana: 'api/grafana',
       istioConfig: (namespace: string) => `api/namespaces/${namespace}/istio`,
+      allIstioConfigs: `api/istio/config`,
       istioConfigCreate: (namespace: string, objectType: string) => `api/namespaces/${namespace}/istio/${objectType}`,
-      istioConfigCreateSubtype: (namespace: string, objectType: string, objectSubtype: string) =>
-        `api/namespaces/${namespace}/istio/${objectType}/${objectSubtype}`,
       istioConfigDetail: (namespace: string, objectType: string, object: string) =>
         `api/namespaces/${namespace}/istio/${objectType}/${object}`,
-      istioConfigDetailSubtype: (namespace: string, objectType: string, objectSubtype: string, object: string) =>
-        `api/namespaces/${namespace}/istio/${objectType}/${objectSubtype}/${object}`,
       istioPermissions: 'api/istio/permissions',
       jaeger: 'api/jaeger',
-      jaegerTraces: (namespace: string, service: string) => `api/namespaces/${namespace}/services/${service}/traces`,
-      jaegerErrorTraces: (namespace: string, service: string) =>
-        `api/namespaces/${namespace}/services/${service}/errortraces`,
-      jaegerTrace: (namespace: string, service: string, idTrace: string) =>
-        `api/namespaces/${namespace}/services/${service}/traces/${idTrace}`,
-      jaegerTraceDetail: (namespace: string, service: string, traceID: string) =>
-        `api/namespaces/${namespace}/services/${service}/traces/${traceID}`,
+      appTraces: (namespace: string, app: string) => `api/namespaces/${namespace}/apps/${app}/traces`,
+      serviceTraces: (namespace: string, svc: string) => `api/namespaces/${namespace}/services/${svc}/traces`,
+      workloadTraces: (namespace: string, wkd: string) => `api/namespaces/${namespace}/workloads/${wkd}/traces`,
+      jaegerErrorTraces: (namespace: string, app: string) => `api/namespaces/${namespace}/apps/${app}/errortraces`,
+      jaegerTrace: (idTrace: string) => `api/traces/${idTrace}`,
       logout: 'api/logout',
+      metricsStats: 'api/stats/metrics',
       namespaces: 'api/namespaces',
+      namespace: (namespace: string) => `api/namespaces/${namespace}`,
       namespacesGraphElements: `api/namespaces/graph`,
       namespaceHealth: (namespace: string) => `api/namespaces/${namespace}/health`,
       namespaceMetrics: (namespace: string) => `api/namespaces/${namespace}/metrics`,
       namespaceTls: (namespace: string) => `api/namespaces/${namespace}/tls`,
       namespaceValidations: (namespace: string) => `api/namespaces/${namespace}/validations`,
       meshTls: () => 'api/mesh/tls',
+      istioStatus: () => 'api/istio/status',
+      istioCertsInfo: () => 'api/istio/certs',
       pod: (namespace: string, pod: string) => `api/namespaces/${namespace}/pods/${pod}`,
       podLogs: (namespace: string, pod: string) => `api/namespaces/${namespace}/pods/${pod}/logs`,
+      podEnvoyProxy: (namespace: string, pod: string) => `api/namespaces/${namespace}/pods/${pod}/config_dump`,
+      podEnvoyProxyLogging: (namespace: string, pod: string) => `api/namespaces/${namespace}/pods/${pod}/logging`,
+      podEnvoyProxyResourceEntries: (namespace: string, pod: string, resource: string) =>
+        `api/namespaces/${namespace}/pods/${pod}/config_dump/${resource}`,
       serverConfig: `api/config`,
       services: (namespace: string) => `api/namespaces/${namespace}/services`,
       service: (namespace: string, service: string) => `api/namespaces/${namespace}/services/${service}`,
@@ -139,14 +160,7 @@ const conf = {
       serviceMetrics: (namespace: string, service: string) => `api/namespaces/${namespace}/services/${service}/metrics`,
       serviceDashboard: (namespace: string, service: string) =>
         `api/namespaces/${namespace}/services/${service}/dashboard`,
-      serviceSpans: (namespace: string, service: string) => `api/namespaces/${namespace}/services/${service}/spans`,
       status: 'api/status',
-      threeScale: 'api/threescale',
-      threeScaleHandler: (handlerName: string) => `api/threescale/handlers/${handlerName}`,
-      threeScaleHandlers: 'api/threescale/handlers',
-      threeScaleServiceRule: (namespace: string, service: string) =>
-        `api/threescale/namespaces/${namespace}/services/${service}`,
-      threeScaleServiceRules: (namespace: string) => `api/threescale/namespaces/${namespace}/services`,
       workloads: (namespace: string) => `api/namespaces/${namespace}/workloads`,
       workload: (namespace: string, workload: string) => `api/namespaces/${namespace}/workloads/${workload}`,
       workloadGraphElements: (namespace: string, workload: string) =>
@@ -158,6 +172,12 @@ const conf = {
       workloadDashboard: (namespace: string, workload: string) =>
         `api/namespaces/${namespace}/workloads/${workload}/dashboard`
     }
+  },
+  /** Graph configurations */
+  graph: {
+    // maxHosts is the maximum number of hosts to show in the graph for
+    // nodes representing Gateways, VirtualServices and ServiceEntries.
+    maxHosts: 5
   }
 };
 

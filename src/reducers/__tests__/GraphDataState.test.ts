@@ -1,34 +1,44 @@
 import graphDataState from '../GraphDataState';
 import { GraphActions } from '../../actions/GraphActions';
 import { GlobalActions } from '../../actions/GlobalActions';
-import { EdgeLabelMode, GraphType } from '../../types/Graph';
-import { DagreGraph } from '../../components/CytoscapeGraph/graphs/DagreGraph';
+import { DefaultTrafficRates, EdgeMode, GraphType } from '../../types/Graph';
+import { GraphState } from 'store/Store';
+import { KialiDagreGraph } from '../../components/CytoscapeGraph/graphs/KialiDagreGraph';
 
 describe('GraphDataState', () => {
   it('should return the initial state', () => {
     expect(graphDataState(undefined, GlobalActions.unknown())).toEqual({
-      cyData: null,
-      layout: DagreGraph.getLayout(),
+      edgeMode: EdgeMode.ALL,
+      graphDefinition: null,
+      layout: KialiDagreGraph.getLayout(),
+      namespaceLayout: KialiDagreGraph.getLayout(),
       node: undefined,
+      rankResult: { upperBound: 0 },
       summaryData: null,
       toolbarState: {
+        boxByCluster: true,
+        boxByNamespace: true,
         compressOnHide: true,
-        edgeLabelMode: EdgeLabelMode.NONE,
+        edgeLabels: [],
         findValue: '',
         graphType: GraphType.VERSIONED_APP,
         hideValue: '',
-        showCircuitBreakers: true,
+        rankBy: [],
         showFindHelp: false,
         showLegend: false,
+        showIdleEdges: false,
+        showIdleNodes: false,
         showMissingSidecars: true,
-        showNodeLabels: true,
+        showOperationNodes: false,
+        showRank: false,
         showSecurity: false,
         showServiceNodes: true,
         showTrafficAnimation: false,
-        showUnusedNodes: false,
-        showVirtualServices: true
-      }
-    });
+        showVirtualServices: true,
+        trafficRates: DefaultTrafficRates
+      },
+      updateTime: 0
+    } as GraphState);
   });
 
   it('should handle UPDATE_SUMMARY', () => {

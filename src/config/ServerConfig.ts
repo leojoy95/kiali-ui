@@ -1,10 +1,15 @@
+import _ from 'lodash';
 import { ServerConfig } from '../types/ServerConfig';
+import { parseHealthConfig } from './HealthConfig';
 
 export type Durations = { [key: number]: string };
 
 export type ComputedServerConfig = ServerConfig & {
   durations: Durations;
 };
+
+export const humanDurations = (cfg: ComputedServerConfig, prefix?: string, suffix?: string) =>
+  _.mapValues(cfg.durations, v => _.reject([prefix, v, suffix], _.isEmpty).join(' '));
 
 const toDurations = (tupleArray: [number, string][]): Durations => {
   const obj = {};
@@ -15,17 +20,17 @@ const toDurations = (tupleArray: [number, string][]): Durations => {
 };
 
 const durationsTuples: [number, string][] = [
-  [60, '1m Traffic'],
-  [300, '5m Traffic'],
-  [600, '10m Traffic'],
-  [1800, '30m Traffic'],
-  [3600, '1h Traffic'],
-  [10800, '3h Traffic'],
-  [21600, '6h Traffic'],
-  [43200, '12h Traffic'],
-  [86400, '1d Traffic'],
-  [604800, '7d Traffic'],
-  [2592000, '30d Traffic']
+  [60, '1m'],
+  [300, '5m'],
+  [600, '10m'],
+  [1800, '30m'],
+  [3600, '1h'],
+  [10800, '3h'],
+  [21600, '6h'],
+  [43200, '12h'],
+  [86400, '1d'],
+  [604800, '7d'],
+  [2592000, '30d']
 ];
 
 const computeValidDurations = (cfg: ComputedServerConfig) => {
@@ -41,23 +46,64 @@ const computeValidDurations = (cfg: ComputedServerConfig) => {
   cfg.durations = toDurations(filtered);
 };
 
-// Set some defaults. Mainly used in tests, because
-// these will be overwritten on user login.
-let serverConfig: ComputedServerConfig = {
+// Set some reasonable defaults. Initial values should be valid for fields
+// than may not be providedby/set on the server.
+const defaultServerConfig: ComputedServerConfig = {
+  clusters: {},
+  durations: {},
+  healthConfig: {
+    rate: []
+  },
+  deployment: {
+    viewOnlyMode: false
+  },
   installationTag: 'Kiali Console',
+  istioAnnotations: {
+    istioInjectionAnnotation: 'sidecar.istio.io/inject'
+  },
+  istioCanaryRevision: {
+    current: '',
+    upgrade: ''
+  },
   istioIdentityDomain: 'svc.cluster.local',
   istioNamespace: 'istio-system',
-  istioComponentNamespaces: new Map<string, string>(),
   istioLabels: {
     appLabelName: 'app',
+    injectionLabelName: 'istio-injection',
+    injectionLabelRev: 'istio.io/rev',
     versionLabelName: 'version'
+  },
+  kialiFeatureFlags: {
+    certificatesInformationIndicators: {
+      enabled: true
+    },
+    istioInjectionAction: true,
+    istioUpgradeAction: false,
+    uiDefaults: {
+      graph: {
+        findOptions: [],
+        hideOptions: [],
+        settings: {
+          fontLabel: 13,
+          minFontBadge: 7,
+          minFontLabel: 10
+        },
+        traffic: {
+          grpc: 'requests',
+          http: 'requests',
+          tcp: 'sent'
+        }
+      }
+    }
   },
   prometheus: {
     globalScrapeInterval: 15,
     storageTsdbRetention: 21600
-  },
-  durations: {}
+  }
 };
+
+// Overwritten with real server config on user login. Also used for tests.
+let serverConfig = defaultServerConfig;
 computeValidDurations(serverConfig);
 export { serverConfig };
 
@@ -75,11 +121,13 @@ export const toValidDuration = (duration: number): number => {
   return durationsTuples[0][0];
 };
 
-export const setServerConfig = (svcConfig: ServerConfig) => {
+export const setServerConfig = (cfg: ServerConfig) => {
   serverConfig = {
-    ...svcConfig,
-    durations: {}
+    ...defaultServerConfig,
+    ...cfg
   };
+
+  serverConfig.healthConfig = cfg.healthConfig ? parseHealthConfig(cfg.healthConfig) : serverConfig.healthConfig;
 
   computeValidDurations(serverConfig);
 };
@@ -88,7 +136,5 @@ export const isIstioNamespace = (namespace: string): boolean => {
   if (namespace === serverConfig.istioNamespace) {
     return true;
   }
-  return serverConfig.istioComponentNamespaces
-    ? Object.values(serverConfig.istioComponentNamespaces).includes(namespace)
-    : false;
+  return false;
 };

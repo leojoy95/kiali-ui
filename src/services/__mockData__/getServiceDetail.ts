@@ -15,7 +15,9 @@ export const SERVICE_DETAILS: ServiceDetailsInfo = {
       {
         name: 'http',
         protocol: 'TCP',
-        port: 9080
+        port: 9080,
+        istioProtocol: 'TCP',
+        tlsMode: 'istio'
       }
     ],
     resourceVersion: '2652'
@@ -44,83 +46,77 @@ export const SERVICE_DETAILS: ServiceDetailsInfo = {
         {
           name: 'http',
           protocol: 'TCP',
-          port: 9080
+          port: 9080,
+          istioProtocol: 'TCP',
+          tlsMode: 'istio'
         }
       ]
     }
   ],
-  virtualServices: {
-    items: [
-      {
-        metadata: {
-          name: 'reviews',
-          creationTimestamp: '2018-07-02T13:44:01+02:00',
-          resourceVersion: '393057'
-        },
-        spec: {
-          hosts: ['reviews'],
-          gateways: undefined,
-          http: [
-            {
-              route: [
-                {
-                  destination: {
-                    host: 'reviews',
-                    subset: 'v1'
-                  }
+  virtualServices: [
+    {
+      metadata: {
+        name: 'reviews',
+        creationTimestamp: '2018-07-02T13:44:01+02:00',
+        resourceVersion: '393057'
+      },
+      spec: {
+        hosts: ['reviews'],
+        gateways: undefined,
+        http: [
+          {
+            route: [
+              {
+                destination: {
+                  host: 'reviews',
+                  subset: 'v1'
                 }
-              ]
-            }
-          ],
-          tcp: undefined
-        }
+              }
+            ]
+          }
+        ],
+        tcp: undefined
       }
-    ],
-    permissions: {
-      update: false,
-      delete: false,
-      create: false
     }
-  },
-  destinationRules: {
-    items: [
-      {
-        metadata: {
-          name: 'reviews',
-          creationTimestamp: '2018-07-02T13:44:01+02:00',
-          resourceVersion: '393061'
-        },
-        spec: {
-          host: 'reviews',
-          trafficPolicy: undefined,
-          subsets: [
-            {
-              labels: {
-                version: 'v1'
-              },
-              name: 'v1'
+  ],
+  destinationRules: [
+    {
+      metadata: {
+        name: 'reviews',
+        creationTimestamp: '2018-07-02T13:44:01+02:00',
+        resourceVersion: '393061'
+      },
+      spec: {
+        host: 'reviews',
+        trafficPolicy: undefined,
+        subsets: [
+          {
+            labels: {
+              version: 'v1'
             },
-            {
-              labels: {
-                version: 'v2'
-              },
-              name: 'v2'
+            name: 'v1'
+          },
+          {
+            labels: {
+              version: 'v2'
             },
-            {
-              labels: {
-                version: 'v3'
-              },
-              name: 'v3'
-            }
-          ]
-        }
+            name: 'v2'
+          },
+          {
+            labels: {
+              version: 'v3'
+            },
+            name: 'v3'
+          }
+        ]
       }
-    ],
-    permissions: {
-      update: false,
-      delete: false,
-      create: false
     }
+  ],
+  serviceEntries: [],
+  istioPermissions: {
+    update: false,
+    delete: false,
+    create: false
   },
   workloads: [],
   health: undefined,

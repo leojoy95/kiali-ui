@@ -1,15 +1,13 @@
 import { createSelector } from 'reselect';
 import { KialiAppState } from './Store';
 import { isMTLSEnabled } from '../types/TLSStatus';
+import { TimeRange } from '../types/Common';
 // These memoized selectors are from Redux Reselect package
 
 type Selector<T> = (state: KialiAppState) => T;
 
 const createIdentitySelector = <T extends unknown>(selector: Selector<T>): Selector<T> =>
-  createSelector(
-    selector,
-    (x: T): T => x
-  );
+  createSelector(selector, (x: T): T => x);
 
 // select the proper field from Redux State
 const activeNamespaces = (state: KialiAppState) => state.namespaces.activeNamespaces;
@@ -21,13 +19,21 @@ const duration = (state: KialiAppState) => state.userSettings.duration;
 
 export const durationSelector = createIdentitySelector(duration);
 
+const timeRange = (state: KialiAppState): TimeRange => state.userSettings.timeRange;
+
+export const timeRangeSelector = createIdentitySelector(timeRange);
+
 const namespaceFilter = (state: KialiAppState) => state.namespaces.filter;
 
 export const namespaceFilterSelector = createIdentitySelector(namespaceFilter);
 
-const edgeLabelMode = (state: KialiAppState) => state.graph.toolbarState.edgeLabelMode;
+const edgeLabels = (state: KialiAppState) => state.graph.toolbarState.edgeLabels;
 
-export const edgeLabelModeSelector = createIdentitySelector(edgeLabelMode);
+export const edgeLabelsSelector = createIdentitySelector(edgeLabels);
+
+const edgeMode = (state: KialiAppState) => state.graph.edgeMode;
+
+export const edgeModeSelector = createIdentitySelector(edgeMode);
 
 const findValue = (state: KialiAppState) => state.graph.toolbarState.findValue;
 
@@ -45,6 +51,10 @@ const namespaceItems = (state: KialiAppState) => state.namespaces.items;
 
 export const namespaceItemsSelector = createIdentitySelector(namespaceItems);
 
+const rankBy = (state: KialiAppState) => state.graph.toolbarState.rankBy;
+
+export const rankBySelector = createIdentitySelector(rankBy);
+
 const refreshInterval = (state: KialiAppState) => state.userSettings.refreshInterval;
 
 export const refreshIntervalSelector = createIdentitySelector(refreshInterval);
@@ -52,10 +62,6 @@ export const refreshIntervalSelector = createIdentitySelector(refreshInterval);
 const replayActive = (state: KialiAppState) => state.userSettings.replayActive;
 
 export const replayActiveSelector = createIdentitySelector(replayActive);
-
-const replayWindow = (state: KialiAppState) => state.userSettings.replayWindow;
-
-export const replayWindowSelector = createIdentitySelector(replayWindow);
 
 const replayQueryTime = (state: KialiAppState) => state.userSettings.replayQueryTime;
 
@@ -65,9 +71,13 @@ const lastRefreshAt = (state: KialiAppState) => state.globalState.lastRefreshAt;
 
 export const lastRefreshAtSelector = createIdentitySelector(lastRefreshAt);
 
-const showUnusedNodes = (state: KialiAppState) => state.graph.toolbarState.showUnusedNodes;
+const showIdleNodes = (state: KialiAppState) => state.graph.toolbarState.showIdleNodes;
 
-export const showUnusedNodesSelector = createIdentitySelector(showUnusedNodes);
+export const showIdleNodesSelector = createIdentitySelector(showIdleNodes);
+
+const trafficRates = (state: KialiAppState) => state.graph.toolbarState.trafficRates;
+
+export const trafficRatesSelector = createIdentitySelector(trafficRates);
 
 const meshwideMTLSStatus = (state: KialiAppState) => state.meshTLSStatus.status;
 
@@ -76,3 +86,11 @@ export const meshWideMTLSStatusSelector = createIdentitySelector(meshwideMTLSSta
 const meshwideMTLSEnabled = (state: KialiAppState) => isMTLSEnabled(state.meshTLSStatus.status);
 
 export const meshWideMTLSEnabledSelector = createIdentitySelector(meshwideMTLSEnabled);
+
+const istioStatus = (state: KialiAppState) => state.istioStatus;
+
+export const istioStatusSelector = createIdentitySelector(istioStatus);
+
+const istioCertsInfo = (state: KialiAppState) => state.istioCertsInfo;
+
+export const istioCertsInfoSelector = createIdentitySelector(istioCertsInfo);

@@ -31,7 +31,7 @@ const flexBoxColumnStyle = style({
   flexDirection: 'column'
 });
 
-class Navigation extends React.Component<PropsType, NavigationState> {
+export class Navigation extends React.Component<PropsType, NavigationState> {
   static contextTypes = {
     router: () => null
   };
@@ -56,7 +56,12 @@ class Navigation extends React.Component<PropsType, NavigationState> {
   }
 
   componentDidMount() {
-    document.title = serverConfig.installationTag ? serverConfig.installationTag : 'Kiali Console';
+    let pageTitle = serverConfig.installationTag ? serverConfig.installationTag : 'Kiali';
+    if (!!serverConfig.clusterInfo?.name) {
+      pageTitle += ` [${serverConfig.clusterInfo.name}]`;
+    }
+
+    document.title = pageTitle;
   }
 
   isGraph = () => {
@@ -96,6 +101,7 @@ class Navigation extends React.Component<PropsType, NavigationState> {
         showNavToggle={true}
         onNavToggle={isMobileView ? this.onNavToggleMobile : this.onNavToggleDesktop}
         isNavOpen={isMobileView ? isNavOpenMobile : isNavOpenDesktop || !this.props.navCollapsed}
+        role={'kiali_header'}
       />
     );
 
@@ -120,15 +126,12 @@ class Navigation extends React.Component<PropsType, NavigationState> {
 
 const mapStateToProps = (state: KialiAppState) => ({
   navCollapsed: state.userSettings.interface.navCollapse,
-  jaegerUrl: state.jaegerState && state.jaegerState.url ? state.jaegerState.url : undefined
+  jaegerUrl: state.jaegerState.info && state.jaegerState.info.url ? state.jaegerState.info.url : undefined
 });
 
 const mapDispatchToProps = (dispatch: ThunkDispatch<KialiAppState, void, KialiAppAction>) => ({
   setNavCollapsed: (collapse: boolean) => dispatch(UserSettingsThunkActions.setNavCollapsed(collapse))
 });
 
-const NavigationContainer = connect(
-  mapStateToProps,
-  mapDispatchToProps
-)(Navigation);
+const NavigationContainer = connect(mapStateToProps, mapDispatchToProps)(Navigation);
 export default NavigationContainer;

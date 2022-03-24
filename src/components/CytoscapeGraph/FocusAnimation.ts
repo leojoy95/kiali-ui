@@ -1,4 +1,4 @@
-import { PfColors } from '../Pf/PfColors';
+import { PFColorVals } from '../Pf/PfColors';
 
 // How fast refresh (frame rate)
 const FRAME_RATE = 1 / 30;
@@ -54,10 +54,10 @@ export default class FocusAnimation {
   // "this".
   processStep = () => {
     try {
-      if (this.startTimestamp === undefined) {
-        this.startTimestamp = Date.now();
-      }
       const current = Date.now();
+      if (this.startTimestamp === undefined) {
+        this.startTimestamp = current;
+      }
       const step = (current - this.startTimestamp) / ANIMATION_DURATION;
       this.layer.clear(this.context);
       this.layer.setTransform(this.context);
@@ -102,7 +102,7 @@ export default class FocusAnimation {
 
   private render(element: any, radio: number) {
     const { x, y } = this.getCenter(element);
-    this.context.strokeStyle = PfColors.Blue300;
+    this.context.strokeStyle = PFColorVals.Blue300;
     this.context.lineWidth = LINE_WIDTH;
     this.context.beginPath();
     this.context.arc(x, y, radio, 0, 2 * Math.PI, true);

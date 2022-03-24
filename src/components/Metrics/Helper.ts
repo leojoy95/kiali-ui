@@ -1,19 +1,11 @@
-import {
-  TimeSeries,
-  DashboardModel,
-  AggregationModel,
-  SingleLabelValues,
-  AllPromLabelsValues,
-  PromLabel,
-  MetricsQuery
-} from '@kiali/k-charted-pf4';
-
 import { MetricsSettings, LabelsSettings, Quantiles, LabelSettings } from '../MetricsOptions/MetricsSettings';
 import { boundsToDuration, guardTimeRange, TimeRange, DurationInSeconds } from '../../types/Common';
 import { computePrometheusRateParams } from '../../services/Prometheus';
 import history, { URLParam } from '../../app/History';
 import responseFlags from 'utils/ResponseFlags';
-
+import { AggregationModel, DashboardModel } from 'types/Dashboards';
+import { AllPromLabelsValues, Metric, PromLabel, SingleLabelValues } from 'types/Metrics';
+import { MetricsQuery } from 'types/MetricsOptions';
 // Default to 10 minutes. Showing timeseries to only 1 minute doesn't make so much sense.
 export const defaultMetricsDuration: DurationInSeconds = 600;
 
@@ -22,48 +14,55 @@ export const combineLabelsSettings = (newSettings: LabelsSettings, stateSettings
   // This is allowed because the labels filters state is managed only from this component,
   // so we can override them in props from state
   // LabelsSettings received from props contains the names of the filters with only a default on/off flag.
+  const result: LabelsSettings = new Map();
   newSettings.forEach((lblObj, promLabel) => {
+    const resultValues: SingleLabelValues = {};
     const stateObj = stateSettings.get(promLabel);
+    Object.entries(lblObj.values).forEach(e => {
+      resultValues[e[0]] = stateObj && stateObj.defaultValue === false ? false : e[1];
+    });
     if (stateObj) {
       lblObj.checked = stateObj.checked;
-      if (stateObj.defaultValue === false) {
-        // 1st pass: override default filters (this case only happens when filters are defined from URL)
-        Object.keys(lblObj.values).forEach(k => {
-          lblObj.values[k] = false;
-        });
-      }
-      // 2nd pass: retrieve previous filters
-      Object.keys(stateObj.values).forEach(k => {
-        lblObj.values[k] = stateObj.values[k];
+      Object.entries(stateObj.values).forEach(e => {
+        resultValues[e[0]] = e[1];
       });
     }
+    result.set(promLabel, { ...lblObj, values: resultValues });
   });
-  return newSettings;
+  return result;
 };
 
 export const extractLabelsSettingsOnSeries = (
-  series: TimeSeries[],
+  metrics: Metric[],
   aggregations: AggregationModel[],
   extracted: LabelsSettings
 ): void => {
-  series.forEach(ts => {
-    Object.keys(ts.labelSet).forEach(k => {
+  metrics.forEach(m => {
+    Object.keys(m.labels).forEach(k => {
       const agg = aggregations.find(a => a.label === k);
       if (agg) {
-        const value = ts.labelSet[k];
+        const value = m.labels[k];
         let lblObj = extracted.get(agg.label);
         if (!lblObj) {
           lblObj = {
             checked: true,
             displayName: agg.displayName,
             values: {},
-            defaultValue: true
+            defaultValue: true,
+            singleSelection: agg.singleSelection
           };
           extracted.set(agg.label, lblObj);
         } else {
           lblObj.checked = true;
         }
-        lblObj.values[value] = true;
+        if (!lblObj.values.hasOwnProperty(value)) {
+          if (agg.singleSelection && Object.keys(lblObj.values).length > 0) {
+            // In single-selection mode, do not activate more than one label value at a time
+            lblObj.values[value] = false;
+          } else {
+            lblObj.values[value] = true;
+          }
+        }
       }
     });
   });
@@ -77,19 +76,11 @@ export const extractLabelsSettings = (dashboard: DashboardModel, stateSettings: 
       checked: false,
       displayName: agg.displayName,
       values: {},
-      defaultValue: true
+      defaultValue: true,
+      singleSelection: agg.singleSelection
     })
   );
-  dashboard.charts.forEach(chart => {
-    if (chart.metric) {
-      extractLabelsSettingsOnSeries(chart.metric, dashboard.aggregations, newSettings);
-    }
-    if (chart.histogram) {
-      Object.keys(chart.histogram).forEach(stat => {
-        extractLabelsSettingsOnSeries(chart.histogram![stat], dashboard.aggregations, newSettings);
-      });
-    }
-  });
+  dashboard.charts.forEach(chart => extractLabelsSettingsOnSeries(chart.metrics, dashboard.aggregations, newSettings));
   return combineLabelsSettings(newSettings, stateSettings);
 };
 
@@ -97,12 +88,18 @@ export const mergeLabelFilter = (
   lblSettings: LabelsSettings,
   label: PromLabel,
   value: string,
-  checked: boolean
+  checked: boolean,
+  singleSelection: boolean
 ): LabelsSettings => {
   // Note: we don't really care that the new map references same objects as the old one (at least at the moment) so shallow copy is fine
   const newSettings = new Map(lblSettings);
   const objLbl = newSettings.get(label);
   if (objLbl) {
+    if (singleSelection) {
+      for (const v of Object.keys(objLbl.values)) {
+        objLbl.values[v] = false;
+      }
+    }
     objLbl.values[value] = checked;
   }
   return newSettings;
@@ -116,15 +113,20 @@ export const convertAsPromLabels = (lblSettings: LabelsSettings): AllPromLabelsV
   return promLabels;
 };
 
-export const settingsToOptions = (settings: MetricsSettings, opts: MetricsQuery) => {
+export const settingsToOptions = (settings: MetricsSettings, opts: MetricsQuery, defaultLabels: string[]) => {
   opts.avg = settings.showAverage;
   opts.quantiles = settings.showQuantiles;
-  opts.byLabels = [];
-  settings.labelsSettings.forEach((objLbl, k) => {
-    if (objLbl.checked) {
-      opts.byLabels!.push(k);
-    }
-  });
+  let byLabels = defaultLabels;
+  if (settings.labelsSettings.size > 0) {
+    // Labels have been fetched, so use what comes from labelsSettings
+    byLabels = [];
+    settings.labelsSettings.forEach((objLbl, k) => {
+      if (objLbl.checked) {
+        byLabels.push(k);
+      }
+    });
+  }
+  opts.byLabels = byLabels;
 };
 
 export const timeRangeToOptions = (range: TimeRange, opts: MetricsQuery) => {
@@ -145,13 +147,23 @@ export const timeRangeToOptions = (range: TimeRange, opts: MetricsQuery) => {
 export const retrieveMetricsSettings = (): MetricsSettings => {
   const urlParams = new URLSearchParams(history.location.search);
   const settings: MetricsSettings = {
+    showSpans: false,
+    showTrendlines: false,
     showAverage: true,
-    showQuantiles: ['0.5', '0.95', '0.99'],
+    showQuantiles: [],
     labelsSettings: new Map()
   };
   const avg = urlParams.get(URLParam.SHOW_AVERAGE);
   if (avg !== null) {
     settings.showAverage = avg === 'true';
+  }
+  const spans = urlParams.get(URLParam.SHOW_SPANS);
+  if (spans !== null) {
+    settings.showSpans = spans === 'true';
+  }
+  const trendlines = urlParams.get(URLParam.SHOW_TRENDLINES);
+  if (trendlines !== null) {
+    settings.showTrendlines = trendlines === 'true';
   }
   const quantiles = urlParams.get(URLParam.QUANTILES);
   if (quantiles !== null) {
@@ -170,7 +182,8 @@ export const retrieveMetricsSettings = (): MetricsSettings => {
         displayName: '',
         checked: true,
         values: {},
-        defaultValue: true
+        defaultValue: true,
+        singleSelection: false
       };
       if (kvpair[1]) {
         kvpair[1].split(',').forEach(v => {

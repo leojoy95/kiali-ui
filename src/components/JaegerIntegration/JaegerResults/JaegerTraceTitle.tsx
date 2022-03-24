@@ -1,43 +1,53 @@
 import * as React from 'react';
-import { CardHeader, Text, TextVariants, Tooltip } from '@patternfly/react-core';
-import { JaegerTrace } from '../../../types/JaegerInfo';
-import { PfColors } from '../../Pf/PfColors';
-import { formatDuration } from './transform';
+import { CardHeader, Dropdown, DropdownItem, KebabToggle, Text, TextVariants } from '@patternfly/react-core';
 import { ExternalLinkAltIcon } from '@patternfly/react-icons';
 
-interface JaegerScatterProps {
-  trace: JaegerTrace;
-  duration?: number;
-  onClickLink: string;
+import { FormattedTraceInfo, fullIDStyle } from './FormattedTraceInfo';
+import history from 'app/History';
+
+interface Props {
+  formattedTrace: FormattedTraceInfo;
+  externalURL?: string;
+  graphURL: string;
+  comparisonURL?: string;
 }
 
-export class JaegerTraceTitle extends React.Component<JaegerScatterProps> {
-  render() {
-    const { trace, duration } = this.props;
-    const { traceID, traceName } = trace;
-    return (
-      <CardHeader style={{ backgroundColor: PfColors.Black200, height: '50px' }}>
-        <Text component={TextVariants.h3} style={{ margin: 0, position: 'relative' }}>
-          {traceName === '' ? '<trace-without-root-span>' : traceName}
-          <Tooltip content={<>{traceID}</>}>
-            <span style={{ color: PfColors.Black600, paddingLeft: '10px', fontSize: '14px' }}>
-              {traceID.slice(0, 7)}
-            </span>
-          </Tooltip>
-          {this.props.onClickLink !== '' && (
-            <Tooltip content={<>View Trace in a new tab in the tracing tool</>}>
-              <a
-                href={this.props.onClickLink}
-                style={{ right: '130px', fontSize: '16px', position: 'absolute' }}
-                target={'_blank'}
-              >
-                View Trace in Tracing <ExternalLinkAltIcon />
-              </a>
-            </Tooltip>
-          )}
-          {duration != null && <span style={{ float: 'right', position: 'relative' }}>{formatDuration(duration)}</span>}
-        </Text>
-      </CardHeader>
+export const JaegerTraceTitle = (props: Props) => {
+  const links = [<DropdownItem onClick={() => history.push(props.graphURL)}>View on Graph</DropdownItem>];
+  if (props.externalURL) {
+    links.push(
+      <DropdownItem onClick={() => window.open(props.externalURL, '_blank')}>
+        View in Tracing <ExternalLinkAltIcon />
+      </DropdownItem>
     );
   }
-}
+  if (props.comparisonURL) {
+    links.push(
+      <DropdownItem onClick={() => window.open(props.comparisonURL, '_blank')}>
+        Compare with similar traces <ExternalLinkAltIcon />
+      </DropdownItem>
+    );
+  }
+  const [toggled, setToggled] = React.useState(false);
+  return (
+    <CardHeader>
+      <Text component={TextVariants.h3} style={{ margin: 0, position: 'relative' }}>
+        {props.formattedTrace.name()}
+        <span className={fullIDStyle}>{props.formattedTrace.fullID()}</span>
+        <span style={{ float: 'right', position: 'relative', top: -9 }}>
+          {props.formattedTrace.relativeDate()}
+          <span style={{ padding: '0 10px 0 10px' }}>|</span>
+          {props.formattedTrace.absTime()} ({props.formattedTrace.fromNow()})
+          <Dropdown
+            toggle={<KebabToggle onToggle={() => setToggled(!toggled)} />}
+            dropdownItems={links}
+            isPlain={true}
+            isOpen={toggled}
+            position={'right'}
+            style={{ top: 3 }}
+          />
+        </span>
+      </Text>
+    </CardHeader>
+  );
+};

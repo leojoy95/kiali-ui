@@ -1,19 +1,34 @@
-import { ActiveFilter, FILTER_ACTION_APPEND, FILTER_ACTION_UPDATE, FilterType, FilterTypes } from '../../types/Filters';
+import {
+  ActiveFiltersInfo,
+  FILTER_ACTION_APPEND,
+  FILTER_ACTION_UPDATE,
+  FilterType,
+  FilterTypes
+} from '../../types/Filters';
 import { WorkloadListItem, WorkloadType } from '../../types/Workload';
-import { GenericSortField, HealthSortField } from '../../types/SortFilters';
-import { getRequestErrorsStatus, WithWorkloadHealth } from '../../types/Health';
+import { SortField } from '../../types/SortFilters';
+import { hasHealth } from '../../types/Health';
 import {
   presenceValues,
   istioSidecarFilter,
   healthFilter,
+  labelFilter,
   getFilterSelectedValues,
   getPresenceFilterValue,
   filterByHealth
 } from '../../components/Filters/CommonFilters';
 import { hasMissingSidecar } from '../../components/VirtualList/Config';
 import { TextInputTypes } from '@patternfly/react-core';
+import { filterByLabel } from '../../helpers/LabelFilterHelper';
+import { calculateErrorRate } from '../../types/ErrorRate';
+import { istioTypeFilter } from '../IstioConfigList/FiltersAndSorts';
+import { compareObjectReferences } from '../AppList/FiltersAndSorts';
 
-export const sortFields: GenericSortField<WorkloadListItem>[] = [
+const missingLabels = (r: WorkloadListItem): number => {
+  return r.appLabel && r.versionLabel ? 0 : r.appLabel || r.versionLabel ? 1 : 2;
+};
+
+export const sortFields: SortField<WorkloadListItem>[] = [
   {
     id: 'namespace',
     title: 'Namespace',
@@ -53,6 +68,15 @@ export const sortFields: GenericSortField<WorkloadListItem>[] = [
       if (aSC !== bSC) {
         return aSC - bSC;
       }
+
+      // Second by Details
+      const iRefA = a.istioReferences;
+      const iRefB = b.istioReferences;
+      const cmpRefs = compareObjectReferences(iRefA, iRefB);
+      if (cmpRefs !== 0) {
+        return cmpRefs;
+      }
+
       // Then by additional details
       const iconA = a.additionalDetailSample && a.additionalDetailSample.icon;
       const iconB = b.additionalDetailSample && b.additionalDetailSample.icon;
@@ -66,6 +90,12 @@ export const sortFields: GenericSortField<WorkloadListItem>[] = [
           // Make asc => icon absence is last
           return iconA ? -1 : 1;
         }
+      }
+      // Second by  missing labels
+      const missingA = missingLabels(a);
+      const missingB = missingLabels(b);
+      if (missingA !== missingB) {
+        return missingA > missingB ? 1 : -1;
       }
       // Finally by name
       return a.name.localeCompare(b.name);
@@ -109,7 +139,7 @@ export const sortFields: GenericSortField<WorkloadListItem>[] = [
     compare: (a: WorkloadListItem, b: WorkloadListItem) => {
       if (a.versionLabel && a.appLabel && !(b.versionLabel && b.appLabel)) {
         return -1;
-      } else if (!(a.versionLabel && a.appLabel) && (b.versionLabel && b.appLabel)) {
+      } else if (!(a.versionLabel && a.appLabel) && b.versionLabel && b.appLabel) {
         return 1;
       } else {
         if (a.appLabel && !b.appLabel) {
@@ -133,20 +163,26 @@ export const sortFields: GenericSortField<WorkloadListItem>[] = [
     title: 'Health',
     isNumeric: false,
     param: 'he',
-    compare: (a: WithWorkloadHealth<WorkloadListItem>, b: WithWorkloadHealth<WorkloadListItem>) => {
-      const statusForA = a.health.getGlobalStatus();
-      const statusForB = b.health.getGlobalStatus();
+    compare: (a, b) => {
+      if (hasHealth(a) && hasHealth(b)) {
+        const statusForA = a.health.getGlobalStatus();
+        const statusForB = b.health.getGlobalStatus();
 
-      if (statusForA.priority === statusForB.priority) {
-        // If both workloads have same health status, use error rate to determine order.
-        const ratioA = getRequestErrorsStatus(a.health.requests.errorRatio).value;
-        const ratioB = getRequestErrorsStatus(b.health.requests.errorRatio).value;
-        return ratioA === ratioB ? a.name.localeCompare(b.name) : ratioB - ratioA;
+        if (statusForA.priority === statusForB.priority) {
+          // If both workloads have same health status, use error rate to determine order.
+          const ratioA = calculateErrorRate(a.namespace, a.name, 'workload', a.health.requests).errorRatio.global.status
+            .value;
+          const ratioB = calculateErrorRate(b.namespace, b.name, 'workload', b.health.requests).errorRatio.global.status
+            .value;
+          return ratioA === ratioB ? a.name.localeCompare(b.name) : ratioB - ratioA;
+        }
+
+        return statusForB.priority - statusForA.priority;
+      } else {
+        return 0;
       }
-
-      return statusForB.priority - statusForA.priority;
     }
-  } as HealthSortField<WorkloadListItem>
+  }
 ];
 
 const workloadNameFilter: FilterType = {
@@ -158,7 +194,7 @@ const workloadNameFilter: FilterType = {
   filterValues: []
 };
 
-const appLabelFilter: FilterType = {
+export const appLabelFilter: FilterType = {
   id: 'applabel',
   title: 'App Label',
   placeholder: 'Filter by App Label Validation',
@@ -167,7 +203,7 @@ const appLabelFilter: FilterType = {
   filterValues: presenceValues
 };
 
-const versionLabelFilter: FilterType = {
+export const versionLabelFilter: FilterType = {
   id: 'versionlabel',
   title: 'Version Label',
   placeholder: 'Filter by Version Label Validation',
@@ -226,9 +262,11 @@ export const availableFilters: FilterType[] = [
   workloadNameFilter,
   workloadTypeFilter,
   istioSidecarFilter,
+  istioTypeFilter,
   healthFilter,
   appLabelFilter,
-  versionLabelFilter
+  versionLabelFilter,
+  labelFilter
 ];
 
 /** Filter Method */
@@ -248,7 +286,7 @@ const filterByType = (items: WorkloadListItem[], filter: string[]): WorkloadList
   return items.filter(item => includeName(item.type, filter));
 };
 
-const filterByLabel = (
+const filterByLabelPresence = (
   items: WorkloadListItem[],
   istioSidecar: boolean | undefined,
   app: boolean | undefined,
@@ -274,26 +312,34 @@ const filterByName = (items: WorkloadListItem[], names: string[]): WorkloadListI
   return items.filter(item => names.some(name => item.name.includes(name)));
 };
 
-export const filterBy = (
-  items: WorkloadListItem[],
-  filters: ActiveFilter[]
-): Promise<WorkloadListItem[]> | WorkloadListItem[] => {
+const filterByIstioType = (items: WorkloadListItem[], istioTypes: string[]): WorkloadListItem[] => {
+  return items.filter(item => item.istioReferences.filter(ref => istioTypes.includes(ref.objectType)).length !== 0);
+};
+
+export const filterBy = (items: WorkloadListItem[], filters: ActiveFiltersInfo): WorkloadListItem[] => {
   const workloadTypeFilters = getFilterSelectedValues(workloadTypeFilter, filters);
   const workloadNamesSelected = getFilterSelectedValues(workloadNameFilter, filters);
   const istioSidecar = getPresenceFilterValue(istioSidecarFilter, filters);
   const appLabel = getPresenceFilterValue(appLabelFilter, filters);
   const versionLabel = getPresenceFilterValue(versionLabelFilter, filters);
+  const labelFilters = getFilterSelectedValues(labelFilter, filters);
 
   let ret = items;
   ret = filterByType(ret, workloadTypeFilters);
   ret = filterByName(ret, workloadNamesSelected);
-  ret = filterByLabel(ret, istioSidecar, appLabel, versionLabel);
+  ret = filterByLabelPresence(ret, istioSidecar, appLabel, versionLabel);
+  ret = filterByLabel(ret, labelFilters, filters.op) as WorkloadListItem[];
 
   // We may have to perform a second round of filtering, using data fetched asynchronously (health)
   // If not, exit fast
   const healthSelected = getFilterSelectedValues(healthFilter, filters);
   if (healthSelected.length > 0) {
     return filterByHealth(ret, healthSelected);
+  }
+
+  const istioTypeSelected = getFilterSelectedValues(istioTypeFilter, filters);
+  if (istioTypeSelected.length > 0) {
+    return filterByIstioType(ret, istioTypeSelected);
   }
   return ret;
 };
@@ -302,19 +348,8 @@ export const filterBy = (
 
 export const sortWorkloadsItems = (
   unsorted: WorkloadListItem[],
-  sortField: GenericSortField<WorkloadListItem>,
+  sortField: SortField<WorkloadListItem>,
   isAscending: boolean
-): Promise<WorkloadListItem[]> => {
-  if (sortField.title === 'Health') {
-    // In the case of health sorting, we may not have all health promises ready yet
-    // So we need to get them all before actually sorting
-    const allHealthPromises: Promise<WithWorkloadHealth<WorkloadListItem>>[] = unsorted.map(item => {
-      return item.healthPromise.then((health): WithWorkloadHealth<WorkloadListItem> => ({ ...item, health }));
-    });
-    return Promise.all(allHealthPromises).then(arr => {
-      return arr.sort(isAscending ? sortField.compare : (a, b) => sortField.compare(b, a));
-    });
-  }
-  const sorted = unsorted.sort(isAscending ? sortField.compare : (a, b) => sortField.compare(b, a));
-  return Promise.resolve(sorted);
+): WorkloadListItem[] => {
+  return unsorted.sort(isAscending ? sortField.compare : (a, b) => sortField.compare(b, a));
 };

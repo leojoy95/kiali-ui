@@ -19,6 +19,9 @@ import { INITIAL_NAMESPACE_STATE } from '../reducers/NamespaceState';
 import { INITIAL_JAEGER_STATE } from '../reducers/JaegerState';
 import { INITIAL_MESH_TLS_STATE } from '../reducers/MeshTlsState';
 import { INITIAL_TOUR_STATE } from '../reducers/TourState';
+import { INITIAL_ISTIO_STATUS_STATE } from '../reducers/IstioStatusState';
+import { INITIAL_METRICS_STATS_STATE } from '../reducers/MetricsStatsState';
+import { INITIAL_ISTIO_CERTS_INFO_STATE } from 'reducers/IstioCertsInfoState';
 
 declare const window;
 
@@ -33,6 +36,12 @@ const whitelistInputWithInitialState = (reducerName: string, inboundPaths: strin
     { whitelist: [reducerName] }
   );
 
+const authenticationPersistFilter = whitelistInputWithInitialState(
+  'authentication',
+  ['landingRoute'],
+  INITIAL_LOGIN_STATE
+);
+
 const namespacePersistFilter = whitelistInputWithInitialState(
   'namespaces',
   ['activeNamespaces'],
@@ -43,15 +52,15 @@ const graphPersistFilter = whitelistInputWithInitialState('graph', ['filterState
 
 const userSettingsPersitFilter = whitelistInputWithInitialState(
   'userSettings',
-  ['duration', 'refreshInterval'],
+  ['duration', 'refreshInterval', 'timeRange'],
   INITIAL_USER_SETTINGS_STATE
 );
 
 const persistConfig = {
   key: persistKey,
   storage: storage,
-  whitelist: ['namespaces', 'jaegerState', 'statusState', 'graph', 'userSettings'],
-  transforms: [namespacePersistFilter, graphPersistFilter, userSettingsPersitFilter]
+  whitelist: ['authentication', 'graph', 'jaegerState', 'namespaces', 'statusState', 'userSettings'],
+  transforms: [authenticationPersistFilter, graphPersistFilter, namespacePersistFilter, userSettingsPersitFilter]
 };
 
 const composeEnhancers =
@@ -81,6 +90,9 @@ const initialStore: KialiAppState = {
   userSettings: INITIAL_USER_SETTINGS_STATE,
   jaegerState: INITIAL_JAEGER_STATE,
   meshTLSStatus: INITIAL_MESH_TLS_STATE,
+  metricsStats: INITIAL_METRICS_STATS_STATE,
+  istioStatus: INITIAL_ISTIO_STATUS_STATE,
+  istioCertsInfo: INITIAL_ISTIO_CERTS_INFO_STATE,
   tourState: INITIAL_TOUR_STATE
 };
 

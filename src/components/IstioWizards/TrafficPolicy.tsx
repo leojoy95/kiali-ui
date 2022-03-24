@@ -4,8 +4,16 @@ import { Form, FormGroup, FormSelect, FormSelectOption, Radio, Switch, TextInput
 import { MTLSStatuses, nsWideMTLSStatus, TLSStatus } from '../../types/TLSStatus';
 import { KialiAppState } from '../../store/Store';
 import { meshWideMTLSStatusSelector } from '../../store/Selectors';
-import { HTTPCookie, LoadBalancerSettings } from '../../types/IstioObjects';
+import {
+  ConnectionPoolSettings,
+  HTTPCookie,
+  LoadBalancerSettings,
+  OutlierDetection as OutlierDetectionProps,
+  PeerAuthenticationMutualTLSMode
+} from '../../types/IstioObjects';
+import { LOAD_BALANCER_TOOLTIP, PEER_AUTHENTICATION_TOOLTIP, wizardTooltip } from './WizardHelp';
 
+export const UNSET = 'UNSET';
 export const DISABLE = 'DISABLE';
 export const ISTIO_MUTUAL = 'ISTIO_MUTUAL';
 export const SIMPLE = 'SIMPLE';
@@ -14,7 +22,7 @@ export const ROUND_ROBIN = 'ROUND_ROBIN';
 
 export const loadBalancerSimple: string[] = [ROUND_ROBIN, 'LEAST_CONN', 'RANDOM', 'PASSTHROUGH'];
 
-export const mTLSMode: string[] = [DISABLE, ISTIO_MUTUAL, SIMPLE, MUTUAL];
+export const mTLSMode: string[] = [UNSET, DISABLE, ISTIO_MUTUAL, SIMPLE, MUTUAL];
 
 type ReduxProps = {
   meshWideStatus: string;
@@ -29,6 +37,12 @@ type Props = ReduxProps & {
   loadBalancer: LoadBalancerSettings;
   onTrafficPolicyChange: (valid: boolean, trafficPolicy: TrafficPolicyState) => void;
   nsWideStatus?: TLSStatus;
+  hasPeerAuthentication: boolean;
+  peerAuthenticationMode: PeerAuthenticationMutualTLSMode;
+  addConnectionPool: boolean;
+  connectionPool: ConnectionPoolSettings;
+  addOutlierDetection: boolean;
+  outlierDetection: OutlierDetectionProps;
 };
 
 export enum ConsistentHashType {
@@ -47,6 +61,17 @@ export type TrafficPolicyState = {
   simpleLB: boolean;
   consistentHashType: ConsistentHashType;
   loadBalancer: LoadBalancerSettings;
+  peerAuthnSelector: PeerAuthenticationSelectorState;
+  addConnectionPool: boolean;
+  connectionPool: ConnectionPoolSettings;
+  addOutlierDetection: boolean;
+  outlierDetection: OutlierDetectionProps;
+};
+
+export type PeerAuthenticationSelectorState = {
+  addPeerAuthentication: boolean;
+  addPeerAuthnModified: boolean;
+  mode: PeerAuthenticationMutualTLSMode;
 };
 
 const durationRegex = /^[0-9]*(\.[0-9]+)?s?$/;
@@ -62,7 +87,9 @@ enum TrafficPolicyForm {
   LB_CONSISTENT_HASH,
   LB_HTTP_HEADER_NAME,
   LB_HTTP_COOKIE_NAME,
-  LB_HTTP_COOKIE_TTL
+  LB_HTTP_COOKIE_TTL,
+  PA_SWITCH,
+  PA_MODE
 }
 
 class TrafficPolicy extends React.Component<Props, TrafficPolicyState> {
@@ -87,7 +114,16 @@ class TrafficPolicy extends React.Component<Props, TrafficPolicyState> {
       addLoadBalancer: props.hasLoadBalancer,
       simpleLB: props.loadBalancer && props.loadBalancer.simple !== undefined && props.loadBalancer.simple !== null,
       consistentHashType: consistentHashType,
-      loadBalancer: props.loadBalancer
+      loadBalancer: props.loadBalancer,
+      peerAuthnSelector: {
+        addPeerAuthentication: props.hasPeerAuthentication,
+        addPeerAuthnModified: false,
+        mode: props.peerAuthenticationMode
+      },
+      addConnectionPool: props.addConnectionPool,
+      connectionPool: props.connectionPool,
+      addOutlierDetection: props.addOutlierDetection,
+      outlierDetection: props.outlierDetection
     };
   }
 
@@ -95,20 +131,22 @@ class TrafficPolicy extends React.Component<Props, TrafficPolicyState> {
     const meshWideStatus = this.props.meshWideStatus || MTLSStatuses.NOT_ENABLED;
     const nsWideStatus = this.props.nsWideStatus ? this.props.nsWideStatus.status : MTLSStatuses.NOT_ENABLED;
     const isMtlsEnabled = nsWideMTLSStatus(nsWideStatus, meshWideStatus);
-    if (isMtlsEnabled === MTLSStatuses.ENABLED) {
-      this.setState(
-        {
-          tlsModified: true,
-          mtlsMode: ISTIO_MUTUAL
-        },
-        () => this.props.onTrafficPolicyChange(true, this.state)
-      );
-    } else if (this.props.mtlsMode !== '' && this.props.mtlsMode !== DISABLE) {
+    // If there is a previous value, use it
+    if (this.props.mtlsMode !== '' && this.props.mtlsMode !== UNSET) {
       // Don't forget to update the mtlsMode
       this.setState(
         {
           tlsModified: true,
           mtlsMode: this.props.mtlsMode
+        },
+        () => this.props.onTrafficPolicyChange(true, this.state)
+      );
+      // otherwise, if there is MTLS enabled, use ISTIO_MUTUAL
+    } else if (isMtlsEnabled === MTLSStatuses.ENABLED) {
+      this.setState(
+        {
+          tlsModified: true,
+          mtlsMode: ISTIO_MUTUAL
         },
         () => this.props.onTrafficPolicyChange(true, this.state)
       );
@@ -162,6 +200,10 @@ class TrafficPolicy extends React.Component<Props, TrafficPolicyState> {
       default:
         return true;
     }
+  };
+
+  isValidTLS = (state: TrafficPolicyState): boolean => {
+    return state.mtlsMode !== undefined;
   };
 
   onFormChange = (component: TrafficPolicyForm, value: string) => {
@@ -340,6 +382,34 @@ class TrafficPolicy extends React.Component<Props, TrafficPolicyState> {
           () => this.props.onTrafficPolicyChange(this.isValidLB(this.state), this.state)
         );
         break;
+      case TrafficPolicyForm.PA_SWITCH:
+        this.setState(
+          prevState => {
+            return {
+              peerAuthnSelector: {
+                addPeerAuthentication: !prevState.peerAuthnSelector.addPeerAuthentication,
+                addPeerAuthnModified: !prevState.peerAuthnSelector.addPeerAuthnModified,
+                mode: prevState.peerAuthnSelector.mode
+              }
+            };
+          },
+          () => this.props.onTrafficPolicyChange(this.isValidTLS(this.state), this.state)
+        );
+        break;
+      case TrafficPolicyForm.PA_MODE:
+        this.setState(
+          prevState => {
+            return {
+              peerAuthnSelector: {
+                addPeerAuthentication: prevState.peerAuthnSelector.addPeerAuthentication,
+                addPeerAuthnModified: prevState.peerAuthnSelector.addPeerAuthnModified,
+                mode: value as PeerAuthenticationMutualTLSMode
+              }
+            };
+          },
+          () => this.props.onTrafficPolicyChange(this.isValidTLS(this.state), this.state)
+        );
+        break;
       default:
       // No default action
     }
@@ -349,7 +419,11 @@ class TrafficPolicy extends React.Component<Props, TrafficPolicyState> {
     const isValidLB = this.isValidLB(this.state);
     return (
       <Form isHorizontal={true}>
-        <FormGroup label="TLS" fieldId="advanced-tls">
+        <FormGroup
+          label="TLS"
+          fieldId="advanced-tls"
+          helperText="TLS related settings for connections to the upstream service."
+        >
           <FormSelect
             value={this.state.mtlsMode}
             onChange={(mtlsMode: string) => this.onFormChange(TrafficPolicyForm.TLS, mtlsMode)}
@@ -399,6 +473,30 @@ class TrafficPolicy extends React.Component<Props, TrafficPolicyState> {
             </FormGroup>
           </>
         )}
+        <FormGroup label="Add PeerAuthentication" fieldId="advanced-paSwitch">
+          <Switch
+            id="advanced-paSwitch"
+            label={' '}
+            labelOff={' '}
+            isChecked={this.state.peerAuthnSelector.addPeerAuthentication}
+            onChange={() => this.onFormChange(TrafficPolicyForm.PA_SWITCH, '')}
+          />
+          <span>{wizardTooltip(PEER_AUTHENTICATION_TOOLTIP)}</span>
+        </FormGroup>
+        {this.state.peerAuthnSelector.addPeerAuthentication && (
+          <FormGroup fieldId="advanced-pa-mode" label="Mode">
+            <FormSelect
+              value={this.state.peerAuthnSelector.mode}
+              onChange={(mode: string) => this.onFormChange(TrafficPolicyForm.PA_MODE, mode)}
+              id="trafficPolicy-pa-mode"
+              name="trafficPolicy-pa-mode"
+            >
+              {Object.keys(PeerAuthenticationMutualTLSMode).map(mode => (
+                <FormSelectOption key={mode} value={mode} label={mode} />
+              ))}
+            </FormSelect>
+          </FormGroup>
+        )}
         <FormGroup label="Add LoadBalancer" fieldId="advanced-lbSwitch">
           <Switch
             id="advanced-lbSwitch"
@@ -407,6 +505,7 @@ class TrafficPolicy extends React.Component<Props, TrafficPolicyState> {
             isChecked={this.state.addLoadBalancer}
             onChange={() => this.onFormChange(TrafficPolicyForm.LB_SWITCH, '')}
           />
+          {wizardTooltip(LOAD_BALANCER_TOOLTIP)}
         </FormGroup>
         {this.state.addLoadBalancer && (
           <>

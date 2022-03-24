@@ -1,10 +1,15 @@
-import { createBrowserHistory, createMemoryHistory } from 'history';
+import { createBrowserHistory, createMemoryHistory, createHashHistory } from 'history';
 import { toValidDuration } from '../config/ServerConfig';
 import { BoundsInMilliseconds } from 'types/Common';
 
 const webRoot = (window as any).WEB_ROOT ? (window as any).WEB_ROOT : undefined;
 const baseName = webRoot && webRoot !== '/' ? webRoot + '/console' : '/console';
-const history = process.env.TEST_RUNNER ? createMemoryHistory() : createBrowserHistory({ basename: baseName });
+const historyMode = (window as any).HISTORY_MODE ? (window as any).HISTORY_MODE : 'browser';
+const history = process.env.TEST_RUNNER
+  ? createMemoryHistory()
+  : historyMode === 'hash'
+  ? createHashHistory()
+  : createBrowserHistory({ basename: baseName });
 
 export default history;
 
@@ -12,29 +17,52 @@ export enum URLParam {
   AGGREGATOR = 'aggregator',
   BY_LABELS = 'bylbl',
   DIRECTION = 'direction',
+  DISPLAY_MODE = 'displayMode',
   DURATION = 'duration',
   FOCUS_SELECTOR = 'focusSelector',
   FROM = 'from',
-  GRAPH_EDGES = 'edges',
+  GRAPH_ANIMATION = 'animation',
+  GRAPH_BADGE_SECURITY = 'badgeSecurity',
+  GRAPH_BADGE_SIDECAR = 'badgeSidecar',
+  GRAPH_BADGE_VS = 'badgeVS',
+  GRAPH_BOX_CLUSTER = 'boxCluster',
+  GRAPH_BOX_NAMESPACE = 'boxNamespace',
+  GRAPH_COMPRESS_ON_HIDE = 'graphCompressOnHide',
+  GRAPH_EDGE_LABEL = 'edges',
+  GRAPH_EDGE_MODE = 'edgeMode',
+  GRAPH_FIND = 'graphFind',
+  GRAPH_HIDE = 'graphHide',
+  GRAPH_IDLE_EDGES = 'idleEdges',
+  GRAPH_IDLE_NODES = 'idleNodes',
   GRAPH_LAYOUT = 'layout',
+  GRAPH_NAMESPACE_LAYOUT = 'namespaceLayout',
+  GRAPH_OPERATION_NODES = 'operationNodes',
+  GRAPH_RANK = 'rank',
+  GRAPH_RANK_BY = 'rankBy',
+  GRAPH_REPLAY_ACTIVE = 'replayActive',
+  GRAPH_REPLAY_INTERVAL = 'replayInterval',
+  GRAPH_REPLAY_START = 'replayStart',
   GRAPH_SERVICE_NODES = 'injectServiceNodes',
+  GRAPH_TRAFFIC = 'traffic',
   GRAPH_TYPE = 'graphType',
-  JAEGER_START_TIME = 'start',
-  JAEGER_END_TIME = 'end',
+  JAEGER_ERRORS_ONLY = 'errs',
   JAEGER_LIMIT_TRACES = 'limit',
-  JAEGER_TAGS = 'tags',
+  JAEGER_PERCENTILE = 'percentile',
+  JAEGER_SHOW_SPANS_AVG = 'showSpansAvg',
   JAEGER_TRACE_ID = 'traceId',
-  JAEGER_TRACE_INTERVAL_SELECTED = 'intSelectedTrace',
-  JAEGER_STATUS_CODE = 'statusCode',
+  JAEGER_SPAN_ID = 'spanId',
   NAMESPACES = 'namespaces',
   OVERVIEW_TYPE = 'otype',
   QUANTILES = 'quantiles',
+  RANGE_DURATION = 'rangeDuration',
   REFRESH_INTERVAL = 'refresh',
   REPORTER = 'reporter',
   SHOW_AVERAGE = 'avg',
+  SHOW_SPANS = 'spans',
+  SHOW_TRENDLINES = 'trendlines',
   SORT = 'sort',
   TO = 'to',
-  UNUSED_NODES = 'unusedNodes'
+  EXPERIMENTAL_FLAGS = 'xflags'
 }
 
 export interface URLParamValue {
@@ -110,6 +138,14 @@ export class HistoryManager {
     const duration = HistoryManager.getNumericParam(URLParam.DURATION, urlParams);
     if (duration) {
       return toValidDuration(Number(duration));
+    }
+    return undefined;
+  };
+
+  static getRangeDuration = (urlParams?: URLSearchParams): number | undefined => {
+    const rangeDuration = HistoryManager.getNumericParam(URLParam.RANGE_DURATION, urlParams);
+    if (rangeDuration) {
+      return toValidDuration(Number(rangeDuration));
     }
     return undefined;
   };

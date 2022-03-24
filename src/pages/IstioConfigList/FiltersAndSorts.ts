@@ -2,14 +2,6 @@ import { SortField } from '../../types/SortFilters';
 import { IstioConfigItem } from '../../types/IstioConfigList';
 import { FILTER_ACTION_APPEND, FilterType, FilterTypes } from '../../types/Filters';
 
-export const getType = (item: IstioConfigItem): string => {
-  return item.type === 'adapter'
-    ? item.type + '_' + item.adapter!.adapter
-    : item.type === 'template'
-    ? item.type + '_' + item.template!.template
-    : item.type;
-};
-
 export const sortFields: SortField<IstioConfigItem>[] = [
   {
     id: 'namespace',
@@ -26,7 +18,7 @@ export const sortFields: SortField<IstioConfigItem>[] = [
     isNumeric: false,
     param: 'it',
     compare: (a: IstioConfigItem, b: IstioConfigItem) => {
-      return getType(a).localeCompare(getType(b)) || a.name.localeCompare(b.name);
+      return a.type.localeCompare(b.type) || a.name.localeCompare(b.name);
     }
   },
   {
@@ -38,9 +30,7 @@ export const sortFields: SortField<IstioConfigItem>[] = [
       // On same name order is not well defined, we need some fallback methods
       // This happens specially on adapters/templates where Istio 1.0.x calls them "handler"
       // So, we have a lot of objects with same namespace+name
-      return (
-        a.name.localeCompare(b.name) || a.namespace.localeCompare(b.namespace) || getType(a).localeCompare(getType(b))
-      );
+      return a.name.localeCompare(b.name) || a.namespace.localeCompare(b.namespace) || a.type.localeCompare(b.type);
     }
   },
   {
@@ -90,80 +80,48 @@ export const istioTypeFilter: FilterType = {
   action: FILTER_ACTION_APPEND,
   filterValues: [
     {
-      id: 'Adapter',
-      title: 'Adapter'
-    },
-    {
       id: 'AuthorizationPolicy',
       title: 'AuthorizationPolicy'
-    },
-    {
-      id: 'ClusterRbacConfig',
-      title: 'ClusterRbacConfig'
     },
     {
       id: 'DestinationRule',
       title: 'DestinationRule'
     },
     {
+      id: 'EnvoyFilter',
+      title: 'EnvoyFilter'
+    },
+    {
       id: 'Gateway',
       title: 'Gateway'
     },
     {
-      id: 'MeshPolicy',
-      title: 'MeshPolicy'
+      id: 'PeerAuthentication',
+      title: 'PeerAuthentication'
     },
     {
-      id: 'Policy',
-      title: 'Policy'
-    },
-    {
-      id: 'QuotaSpec',
-      title: 'QuotaSpec'
-    },
-    {
-      id: 'QuotaSpecBinding',
-      title: 'QuotaSpecBinding'
-    },
-    {
-      id: 'RbacConfig',
-      title: 'RbacConfig'
-    },
-    {
-      id: 'Rule',
-      title: 'Rule'
+      id: 'RequestAuthentication',
+      title: 'RequestAuthentication'
     },
     {
       id: 'ServiceEntry',
       title: 'ServiceEntry'
     },
     {
-      id: 'ServiceMeshPolicy',
-      title: 'ServiceMeshPolicy'
-    },
-    {
-      id: 'ServiceMeshRbacConfig',
-      title: 'ServiceMeshRbacConfig'
-    },
-    {
-      id: 'ServiceRole',
-      title: 'ServiceRole'
-    },
-    {
-      id: 'ServiceRoleBinding',
-      title: 'ServiceRoleBinding'
-    },
-    {
       id: 'Sidecar',
       title: 'Sidecar'
     },
     {
-      id: 'Template',
-      title: 'Template'
-    },
-    {
       id: 'VirtualService',
       title: 'VirtualService'
+    },
+    {
+      id: 'WorkloadEntry',
+      title: 'WorkloadEntry'
+    },
+    {
+      id: 'WorkloadGroup',
+      title: 'WorkloadGroup'
     }
   ]
 };
@@ -201,9 +159,5 @@ export const sortIstioItems = (
   sortField: SortField<IstioConfigItem>,
   isAscending: boolean
 ) => {
-  const sortPromise: Promise<IstioConfigItem[]> = new Promise(resolve => {
-    resolve(unsorted.sort(isAscending ? sortField.compare : (a, b) => sortField.compare(b, a)));
-  });
-
-  return sortPromise;
+  return unsorted.sort(isAscending ? sortField.compare : (a, b) => sortField.compare(b, a));
 };

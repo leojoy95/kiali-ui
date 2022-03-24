@@ -24,27 +24,40 @@ exports[`#LoginPage render correctly should render LoginPage 1`] = `
   }
   footerListVariants="inline"
   loginTitle="Log in Kiali"
-  textContent="Service Mesh Observability."
+  textContent="Service mesh management for Istio."
 >
-  <LoginForm
-    helperText={<React.Fragment />}
-    isLoginButtonDisabled={false}
-    isValidPassword={true}
-    isValidUsername={true}
-    onChangePassword={[Function]}
-    onChangeUsername={[Function]}
-    onLoginButtonClick={[Function]}
-    passwordLabel="Password"
-    passwordValue=""
-    rememberMeAriaLabel="Remember me Checkbox"
-    showHelperText={true}
-    style={
-      Object {
-        "marginTop": "10px",
-      }
-    }
-    usernameLabel="Username"
-    usernameValue=""
-  />
+  <Form>
+    <FormHelperText
+      isError={false}
+      isHidden={false}
+    />
+    <FormGroup
+      fieldId="token"
+      isRequired={true}
+      label="Token"
+    >
+      <ForwardRef
+        id="token"
+        isRequired={true}
+        onChange={[Function]}
+        type="password"
+      />
+    </FormGroup>
+    <ActionGroup>
+      <Component
+        isDisabled={false}
+        onClick={[Function]}
+        style={
+          Object {
+            "width": "100%",
+          }
+        }
+        type="submit"
+        variant="primary"
+      >
+        Log In
+      </Component>
+    </ActionGroup>
+  </Form>
 </LoginPage>
 `;

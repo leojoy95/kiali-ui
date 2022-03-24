@@ -4,19 +4,22 @@ import * as Cy from 'cytoscape';
 import { GraphStyles } from './graphs/GraphStyles';
 import canvas from 'cytoscape-canvas';
 import cytoscape from 'cytoscape';
-import cycola from 'cytoscape-cola';
-import dagre from 'cytoscape-dagre';
-import coseBilkent from 'cytoscape-cose-bilkent';
-import GroupCompoundLayout from './Layout/GroupCompoundLayout';
+import BoxLayout from './Layout/BoxLayout';
 import popper from 'cytoscape-popper';
+import KialiGridLayout from './Layout/KialiGridLayout';
+import KialiDagreLayout from './Layout/KialiDagreLayout';
+import KialiConcentricLayout from './Layout/KialiConcentricLayout';
+import KialiBreadFirstLayout from './Layout/KialiBreadthFirstLayout';
 const nodeHtmlLabel = require('cy-node-html-label');
 
 cytoscape.use(canvas);
-cytoscape.use(cycola);
-cytoscape.use(dagre);
-cytoscape.use(coseBilkent);
 cytoscape.use(popper);
-cytoscape('layout', 'group-compound-layout', GroupCompoundLayout);
+cytoscape('layout', 'box-layout', BoxLayout);
+cytoscape('layout', 'kiali-breadthfirst', KialiBreadFirstLayout);
+cytoscape('layout', 'kiali-dagre', KialiDagreLayout);
+cytoscape('layout', 'kiali-grid', KialiGridLayout);
+cytoscape('layout', 'kiali-concentric', KialiConcentricLayout);
+
 nodeHtmlLabel(cytoscape);
 
 type CytoscapeReactWrapperProps = {};
@@ -74,14 +77,13 @@ export class CytoscapeReactWrapper extends React.Component<CytoscapeReactWrapper
     return <div id="cy" className="graph" style={styleContainer} ref={this.divParentRef} />;
   }
 
-  build() {
+  private build() {
     if (this.cy) {
       this.destroy();
     }
     const opts = {
       container: this.divParentRef.current,
       boxSelectionEnabled: false,
-      autounselectify: true,
       style: GraphStyles.styles(),
       ...GraphStyles.options()
     };
@@ -91,7 +93,7 @@ export class CytoscapeReactWrapper extends React.Component<CytoscapeReactWrapper
     (this.cy as any).nodeHtmlLabel(GraphStyles.htmlNodeLabels(this.cy));
   }
 
-  destroy() {
+  private destroy() {
     if (this.cy) {
       this.cy.destroy();
       this.cy = undefined;

@@ -1,6 +1,6 @@
 import Namespace from './Namespace';
-import { WorkloadHealth } from './Health';
-import { Pod, Service } from './IstioObjects';
+import { WorkloadHealth, WorkloadHealthResponse } from './Health';
+import { ObjectReference, Pod, Service, Validations } from './IstioObjects';
 
 export interface WorkloadId {
   namespace: string;
@@ -12,6 +12,7 @@ export interface Workload {
   type: string;
   createdAt: string;
   resourceVersion: string;
+  istioInjectionAnnotation?: boolean;
   istioSidecar: boolean;
   labels: { [key: string]: string };
   appLabel: boolean;
@@ -19,9 +20,11 @@ export interface Workload {
   replicas: Number;
   availableReplicas: Number;
   pods: Pod[];
+  health?: WorkloadHealthResponse;
   services: Service[];
   runtimes: Runtime[];
   additionalDetails: AdditionalItem[];
+  validations?: Validations;
 }
 
 export const emptyWorkload: Workload = {
@@ -60,16 +63,20 @@ export interface WorkloadOverview {
   additionalDetailSample?: AdditionalItem;
   appLabel: boolean;
   versionLabel: boolean;
+  labels: { [key: string]: string };
+  istioReferences: ObjectReference[];
+  notCoveredAuthPolicy: boolean;
+  health: WorkloadHealth;
 }
 
 export interface WorkloadListItem extends WorkloadOverview {
   namespace: string;
-  healthPromise: Promise<WorkloadHealth>;
 }
 
 export interface WorkloadNamespaceResponse {
   namespace: Namespace;
   workloads: WorkloadOverview[];
+  validations: Validations;
 }
 
 export interface Runtime {

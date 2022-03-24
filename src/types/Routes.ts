@@ -1,5 +1,6 @@
+import * as React from 'react';
+
 export interface MenuItem {
-  iconClass: string;
   title: string;
   to: string;
   pathsActive?: RegExp[];
@@ -7,5 +8,6 @@ export interface MenuItem {
 
 export interface Path {
   path: string;
-  component: any;
+  component?: any;
+  render?: () => React.ReactNode;
 }

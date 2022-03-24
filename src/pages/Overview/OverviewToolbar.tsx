@@ -1,5 +1,6 @@
 import * as React from 'react';
-import { Button } from '@patternfly/react-core';
+import { Button, Tooltip, TooltipPosition } from '@patternfly/react-core';
+import { ListIcon, ThIcon, ThLargeIcon } from '@patternfly/react-icons';
 import { SortAlphaDownIcon, SortAlphaUpIcon } from '@patternfly/react-icons';
 import { connect } from 'react-redux';
 import { ThunkDispatch } from 'redux-thunk';
@@ -17,7 +18,9 @@ import NamespaceInfo from './NamespaceInfo';
 import { ThinStyle } from '../../components/Filters/FilterStyles';
 import * as Sorts from './Sorts';
 import * as Filters from './Filters';
-import TimeControlsContainer from 'components/Time/TimeControls';
+import { style } from 'typestyle';
+import { PFColors } from '../../components/Pf/PfColors';
+import TimeDurationContainer from '../../components/Time/TimeDurationComponent';
 
 type ReduxProps = {
   duration: DurationInSeconds;
@@ -31,11 +34,13 @@ type Props = ReduxProps & {
   sort: (sortField: SortField<NamespaceInfo>, isAscending: boolean) => void;
   displayMode: OverviewDisplayMode;
   setDisplayMode: (mode: OverviewDisplayMode) => void;
+  statefulFilterRef: React.RefObject<StatefulFilters>;
 };
 
 export enum OverviewDisplayMode {
   COMPACT,
-  EXPAND
+  EXPAND,
+  LIST
 }
 
 const overviewTypes = {
@@ -45,7 +50,7 @@ const overviewTypes = {
 };
 
 // TODO Use Object.fromEntries when available
-const sortTypes = (function() {
+const sortTypes = (function () {
   let o = {};
   Sorts.sortFields.forEach(sortType => {
     let id: string = sortType.id;
@@ -53,6 +58,34 @@ const sortTypes = (function() {
   });
   return o;
 })();
+
+const containerPadding = style({
+  backgroundColor: PFColors.White,
+  padding: '0px 20px 0px 20px'
+});
+
+const containerFlex = style({
+  display: 'flex',
+  flexWrap: 'wrap'
+});
+
+const filterToolbarStyle = style({
+  paddingTop: '10px'
+});
+
+const rightToolbarStyle = style({
+  marginLeft: 'auto',
+  height: '118px',
+  padding: '10px 0px 0px 0px'
+});
+
+const timeToolbarStyle = style({
+  textAlign: 'right'
+});
+
+const actionsToolbarStyle = style({
+  paddingTop: '17px'
+});
 
 export type OverviewType = keyof typeof overviewTypes;
 
@@ -127,60 +160,91 @@ export class OverviewToolbar extends React.Component<Props, State> {
   };
 
   render() {
-    return (
+    const filterToolbar = (
       <StatefulFilters
         initialFilters={Filters.availableFilters}
         onFilterChange={this.props.onRefresh}
-        rightToolbar={[
-          <TimeControlsContainer
-            key="overview-time-range"
-            id="overview-time-range"
-            disabled={false}
-            handleRefresh={this.props.onRefresh}
-          />
-        ]}
+        ref={this.props.statefulFilterRef}
       >
-        <>
-          <ToolbarDropdown
-            id="sort_selector"
-            handleSelect={this.changeSortField}
-            value={this.state.sortField.id}
-            label={sortTypes[this.state.overviewType]}
-            options={sortTypes}
-          />
-          <Button variant="plain" onClick={this.updateSortDirection} style={{ ...ThinStyle }}>
-            {this.state.isSortAscending ? <SortAlphaDownIcon /> : <SortAlphaUpIcon />}
-          </Button>
-        </>
+        {this.props.displayMode !== OverviewDisplayMode.LIST && (
+          <>
+            <ToolbarDropdown
+              id="sort_selector"
+              handleSelect={this.changeSortField}
+              value={this.state.sortField.id}
+              label={sortTypes[this.state.overviewType]}
+              options={sortTypes}
+            />
+            <Button variant="plain" onClick={this.updateSortDirection} style={{ ...ThinStyle }}>
+              {this.state.isSortAscending ? <SortAlphaDownIcon /> : <SortAlphaUpIcon />}
+            </Button>
+          </>
+        )}
+      </StatefulFilters>
+    );
+    const timeToolbar = (
+      <div className={timeToolbarStyle}>
+        <TimeDurationContainer
+          key="overview-time-range"
+          id="overview-time-range"
+          disabled={false}
+          handleRefresh={this.props.onRefresh}
+        />
+      </div>
+    );
+    const actionsToolbar = (
+      <div className={actionsToolbarStyle}>
         <ToolbarDropdown
           id="overview-type"
           disabled={false}
           handleSelect={this.updateOverviewType}
-          nameDropdown="Show health for"
+          nameDropdown="Health for"
           value={this.state.overviewType}
           label={overviewTypes[this.state.overviewType]}
           options={overviewTypes}
         />
-        <>
-          <Button
-            onClick={() => this.props.setDisplayMode(OverviewDisplayMode.COMPACT)}
-            title="Compact mode"
-            variant="tertiary"
-            isActive={this.props.displayMode === OverviewDisplayMode.COMPACT}
-          >
-            Compact
-          </Button>
+        <Tooltip content={<>Expand view</>} position={TooltipPosition.top}>
           <Button
             onClick={() => this.props.setDisplayMode(OverviewDisplayMode.EXPAND)}
-            title="Expanded mode"
-            variant="tertiary"
+            variant="plain"
             isActive={this.props.displayMode === OverviewDisplayMode.EXPAND}
-            style={{ marginLeft: '5px' }}
+            style={{ padding: '0 4px 0 16px' }}
           >
-            Expand
+            <ThLargeIcon />
           </Button>
-        </>
-      </StatefulFilters>
+        </Tooltip>
+        <Tooltip content={<>Compact view</>} position={TooltipPosition.top}>
+          <Button
+            onClick={() => this.props.setDisplayMode(OverviewDisplayMode.COMPACT)}
+            variant="plain"
+            isActive={this.props.displayMode === OverviewDisplayMode.COMPACT}
+            style={{ padding: '0 4px 0 4px' }}
+          >
+            <ThIcon />
+          </Button>
+        </Tooltip>
+        <Tooltip content={<>List view</>} position={TooltipPosition.top}>
+          <Button
+            onClick={() => this.props.setDisplayMode(OverviewDisplayMode.LIST)}
+            variant="plain"
+            isActive={this.props.displayMode === OverviewDisplayMode.LIST}
+            style={{ padding: '0 4px 0 4px' }}
+          >
+            <ListIcon />
+          </Button>
+        </Tooltip>
+      </div>
+    );
+    return (
+      <div className={containerPadding}>
+        <div className={containerFlex}>
+          <div className={filterToolbarStyle}>{filterToolbar}</div>
+          <div className={rightToolbarStyle}>
+            {timeToolbar}
+            {actionsToolbar}
+          </div>
+        </div>
+      </div>
     );
   }
 }
@@ -198,9 +262,6 @@ const mapDispatchToProps = (dispatch: ThunkDispatch<KialiAppState, void, KialiAp
   };
 };
 
-const OverviewToolbarContainer = connect(
-  mapStateToProps,
-  mapDispatchToProps
-)(OverviewToolbar);
+const OverviewToolbarContainer = connect(mapStateToProps, mapDispatchToProps)(OverviewToolbar);
 
 export default OverviewToolbarContainer;

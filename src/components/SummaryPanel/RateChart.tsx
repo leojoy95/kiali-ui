@@ -1,17 +1,18 @@
 import * as React from 'react';
-import { VCLines, addLegendEvent, VCEvent } from '@kiali/k-charted-pf4';
 import { Chart, ChartBar, ChartStack, ChartAxis, ChartTooltip } from '@patternfly/react-charts';
 import { VictoryLegend } from 'victory';
 
-import { PfColors, getPFAlertColorVals } from '../../components/Pf/PfColors';
+import { PFColors } from '../../components/Pf/PfColors';
 import { SUMMARY_PANEL_CHART_WIDTH } from '../../types/Graph';
+import { RichDataPoint, VCLines } from 'types/VictoryChartInfo';
+import { addLegendEvent, VCEvent } from 'utils/VictoryEvents';
 
 export const legendHeight = 25;
 export const legendTopMargin = 20;
 
 type Props = {
   baseName: string;
-  series: VCLines;
+  series: VCLines<RichDataPoint>;
   height: number;
   xLabelsWidth: number;
 };
@@ -40,7 +41,7 @@ export class RateChart extends React.Component<Props, State> {
       addLegendEvent(events, {
         legendName: this.props.baseName + '-legend',
         idx: idx,
-        serieName: this.props.baseName + '-bars-' + idx,
+        serieID: [this.props.baseName + '-bars-' + idx],
         onClick: __ => {
           // Same event can be fired for several targets, so make sure we only apply it once
           if (!this.state.hiddenSeries.delete(idx)) {
@@ -111,7 +112,7 @@ export class RateChart extends React.Component<Props, State> {
           name={this.props.baseName + '-legend'}
           data={this.props.series.map((s, idx) => {
             if (this.state.hiddenSeries.has(idx)) {
-              return { ...s.legendItem, symbol: { fill: PfColors.Gray } };
+              return { ...s.legendItem, symbol: { fill: PFColors.Black600 } };
             }
             return s.legendItem;
           })}
@@ -127,19 +128,25 @@ export class RateChart extends React.Component<Props, State> {
   }
 }
 
-export const renderRateChartHttp = (percent2xx: number, percent3xx: number, percent4xx: number, percent5xx: number) => {
-  const colorVals = getPFAlertColorVals();
-  const vcLines: VCLines = [
-    { name: 'OK', x: 'rate', y: percent2xx, color: colorVals.Success },
-    { name: '3xx', x: 'rate', y: percent3xx, color: colorVals.Info },
-    { name: '4xx', x: 'rate', y: percent4xx, color: colorVals.ChartWarning }, // 4xx is also an error use close but distinct color
-    { name: '5xx', x: 'rate', y: percent5xx, color: colorVals.ChartDanger }
+export const renderRateChartHttp = (
+  percent2xx: number,
+  percent3xx: number,
+  percent4xx: number,
+  percent5xx: number,
+  percentNR: number
+) => {
+  const vcLines: VCLines<RichDataPoint> = [
+    { name: 'OK', x: 'rate', y: percent2xx, color: PFColors.Success },
+    { name: '3xx', x: 'rate', y: percent3xx, color: PFColors.Info },
+    { name: '4xx', x: 'rate', y: percent4xx, color: PFColors.ChartWarning }, // 4xx client error, use close but distinct color
+    { name: '5xx', x: 'rate', y: percent5xx, color: PFColors.ChartDanger },
+    { name: 'No Response', x: 'rate', y: percentNR, color: PFColors.ChartOther } // No Response, just use black
   ].map(dp => {
     return {
       datapoints: [dp],
       color: dp.color,
       legendItem: {
-        name: dp.name,
+        name: dp.name === 'No Response' ? 'NR' : dp.name,
         symbol: { fill: dp.color }
       }
     };
@@ -148,10 +155,9 @@ export const renderRateChartHttp = (percent2xx: number, percent3xx: number, perc
 };
 
 export const renderRateChartGrpc = (percentOK: number, percentErr: number) => {
-  const colorVals = getPFAlertColorVals();
-  const vcLines: VCLines = [
-    { name: 'OK', x: 'rate', y: percentOK, color: colorVals.Success },
-    { name: 'Err', x: 'rate', y: percentErr, color: colorVals.Danger }
+  const vcLines: VCLines<RichDataPoint> = [
+    { name: 'OK', x: 'rate', y: percentOK, color: PFColors.Success },
+    { name: 'Err', x: 'rate', y: percentErr, color: PFColors.Danger }
   ].map(dp => {
     return {
       datapoints: [dp],
@@ -170,21 +176,54 @@ export const renderInOutRateChartHttp = (
   percent3xxIn: number,
   percent4xxIn: number,
   percent5xxIn: number,
+  percentNRIn: number,
   percent2xxOut: number,
   percent3xxOut: number,
   percent4xxOut: number,
-  percent5xxOut: number
+  percent5xxOut: number,
+  percentNROut: number
 ) => {
-  const colorVals = getPFAlertColorVals();
-  const vcLines: VCLines = [
-    { name: 'OK', dp: [{ x: 'In', y: percent2xxIn }, { x: 'Out', y: percent2xxOut }], color: colorVals.Success },
-    { name: '3xx', dp: [{ x: 'In', y: percent3xxIn }, { x: 'Out', y: percent3xxOut }], color: colorVals.Info },
+  const vcLines: VCLines<RichDataPoint> = [
+    {
+      name: 'OK',
+      dp: [
+        { x: 'In', y: percent2xxIn },
+        { x: 'Out', y: percent2xxOut }
+      ],
+      color: PFColors.Success
+    },
+    {
+      name: '3xx',
+      dp: [
+        { x: 'In', y: percent3xxIn },
+        { x: 'Out', y: percent3xxOut }
+      ],
+      color: PFColors.Info
+    },
     {
       name: '4xx',
-      dp: [{ x: 'In', y: percent4xxIn }, { x: 'Out', y: percent4xxOut }],
-      color: colorVals.ChartWarning
-    }, // 4xx is also an error use close but distinct color
-    { name: '5xx', dp: [{ x: 'In', y: percent5xxIn }, { x: 'Out', y: percent5xxOut }], color: colorVals.ChartDanger }
+      dp: [
+        { x: 'In', y: percent4xxIn },
+        { x: 'Out', y: percent4xxOut }
+      ],
+      color: PFColors.ChartWarning
+    }, // 4xx client error, use close but distinct color
+    {
+      name: '5xx',
+      dp: [
+        { x: 'In', y: percent5xxIn },
+        { x: 'Out', y: percent5xxOut }
+      ],
+      color: PFColors.ChartDanger
+    },
+    {
+      name: 'No Response',
+      dp: [
+        { x: 'In', y: percentNRIn },
+        { x: 'Out', y: percentNROut }
+      ],
+      color: PFColors.ChartOther
+    } // No Response error, just use black
   ].map(line => {
     return {
       datapoints: line.dp.map(dp => ({
@@ -194,7 +233,7 @@ export const renderInOutRateChartHttp = (
       })),
       color: line.color,
       legendItem: {
-        name: line.name,
+        name: line.name === 'No Response' ? 'NR' : line.name,
         symbol: { fill: line.color }
       }
     };
@@ -208,10 +247,23 @@ export const renderInOutRateChartGrpc = (
   percentOKOut: number,
   percentErrOut: number
 ) => {
-  const colorVals = getPFAlertColorVals();
-  const vcLines: VCLines = [
-    { name: 'OK', dp: [{ x: 'In', y: percentOKIn }, { x: 'Out', y: percentOKOut }], color: colorVals.Success },
-    { name: 'Err', dp: [{ x: 'In', y: percentErrIn }, { x: 'Out', y: percentErrOut }], color: colorVals.Danger }
+  const vcLines: VCLines<RichDataPoint> = [
+    {
+      name: 'OK',
+      dp: [
+        { x: 'In', y: percentOKIn },
+        { x: 'Out', y: percentOKOut }
+      ],
+      color: PFColors.Success
+    },
+    {
+      name: 'Err',
+      dp: [
+        { x: 'In', y: percentErrIn },
+        { x: 'Out', y: percentErrOut }
+      ],
+      color: PFColors.Danger
+    }
   ].map(line => {
     return {
       datapoints: line.dp.map(dp => ({

@@ -18,6 +18,9 @@ type Props = ReduxProps & {
   onCancel: () => void;
   onUpdate: () => void;
   onRefresh: () => void;
+  showOverview: boolean;
+  overview: boolean;
+  onOverview: () => void;
 };
 
 type State = {
@@ -35,7 +38,7 @@ class IstioActionButtons extends React.Component<Props, State> {
   render() {
     return (
       <>
-        <span style={{ float: 'left', paddingTop: '10px', paddingBottom: '10px' }}>
+        <span style={{ float: 'left', padding: '10px' }}>
           {!this.props.readOnly && (
             <span style={{ paddingRight: '5px' }}>
               <Button variant={ButtonVariant.primary} isDisabled={!this.props.canUpdate} onClick={this.props.onUpdate}>
@@ -54,6 +57,15 @@ class IstioActionButtons extends React.Component<Props, State> {
             </Button>
           </span>
         </span>
+        {this.props.showOverview && (
+          <span style={{ float: 'right', padding: '10px' }}>
+            <span style={{ paddingLeft: '5px' }}>
+              <Button variant={ButtonVariant.link} onClick={this.props.onOverview}>
+                {this.props.overview ? 'Close Overview' : 'Show Overview'}
+              </Button>
+            </span>
+          </span>
+        )}
       </>
     );
   }
@@ -72,9 +84,6 @@ const mapDispatchToProps = (dispatch: ThunkDispatch<KialiAppState, void, KialiAp
   };
 };
 
-const IstioActionButtonsContainer = connect(
-  null,
-  mapDispatchToProps
-)(IstioActionButtons);
+const IstioActionButtonsContainer = connect(null, mapDispatchToProps)(IstioActionButtons);
 
 export default IstioActionButtonsContainer;

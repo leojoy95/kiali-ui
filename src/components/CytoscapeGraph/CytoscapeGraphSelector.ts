@@ -1,13 +1,15 @@
-import { NodeType } from '../../types/Graph';
+import { NodeType, BoxByType } from '../../types/Graph';
 
 export type CytoscapeGraphSelector = string;
 
 interface CytoscapeElementData {
+  aggregate?: string;
+  aggregateValue?: string;
   app?: string;
   id?: string;
-  isGroup?: string | null;
+  isBox?: BoxByType | null;
   namespace?: string;
-  nodeType?: string;
+  nodeType?: NodeType;
   service?: string;
   version?: string;
   workload?: string;
@@ -15,9 +17,21 @@ interface CytoscapeElementData {
 
 export class CytoscapeGraphSelectorBuilder {
   private data: CytoscapeElementData = {};
+  private clazz: string = '';
+
+  aggregate(aggregate: string, aggregateValue: string) {
+    this.data.aggregate = aggregate;
+    this.data.aggregateValue = aggregateValue;
+    return this;
+  }
 
   app(app: string) {
     this.data.app = app;
+    return this;
+  }
+
+  class(clazz: string) {
+    this.clazz = '.' + clazz;
     return this;
   }
 
@@ -26,8 +40,8 @@ export class CytoscapeGraphSelectorBuilder {
     return this;
   }
 
-  isGroup(isGroup: string | null) {
-    this.data.isGroup = isGroup;
+  isBox(isBox: BoxByType | null) {
+    this.data.isBox = isBox;
     return this;
   }
 
@@ -57,7 +71,7 @@ export class CytoscapeGraphSelectorBuilder {
   }
 
   build(): CytoscapeGraphSelector {
-    return 'node' + this.buildDataSelector();
+    return 'node' + this.clazz + this.buildDataSelector();
   }
 
   private buildDataSelector() {

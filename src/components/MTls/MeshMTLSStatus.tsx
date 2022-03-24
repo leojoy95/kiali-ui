@@ -74,18 +74,14 @@ class MeshMTLSStatus extends React.Component<Props> {
 
   iconStyle() {
     return style({
-      marginTop: -3,
-      marginRight: 8,
+      marginRight: 10,
+      marginLeft: 10,
       width: 13
     });
   }
 
   render() {
-    return (
-      <div className={this.iconStyle()}>
-        <MTLSStatus status={this.props.status} statusDescriptors={statusDescriptors} />
-      </div>
-    );
+    return <MTLSStatus className={this.iconStyle()} status={this.props.status} statusDescriptors={statusDescriptors} />;
   }
 }
 
@@ -99,8 +95,5 @@ const mapDispatchToProps = (dispatch: KialiDispatch) => ({
   setMeshTlsStatus: bindActionCreators(MeshTlsActions.setinfo, dispatch)
 });
 
-const MeshMTLSSatutsConnected = connect(
-  mapStateToProps,
-  mapDispatchToProps
-)(MeshMTLSStatus);
+const MeshMTLSSatutsConnected = connect(mapStateToProps, mapDispatchToProps)(MeshMTLSStatus);
 export default MeshMTLSSatutsConnected;

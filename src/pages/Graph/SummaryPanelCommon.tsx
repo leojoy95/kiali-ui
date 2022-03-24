@@ -1,20 +1,21 @@
 import * as React from 'react';
 import { style } from 'typestyle';
-import { NodeType, SummaryPanelPropType, Protocol, DecoratedGraphNodeData } from '../../types/Graph';
-import { Health, healthNotAvailable } from '../../types/Health';
+import { NodeType, SummaryPanelPropType, Protocol, DecoratedGraphNodeData, BoxByType } from '../../types/Graph';
 import { IstioMetricsOptions, Reporter, Direction } from '../../types/MetricsOptions';
 import * as API from '../../services/Api';
 import * as M from '../../types/Metrics';
-import { Metric } from '../../types/Metrics';
 import { Response } from '../../services/Api';
 import { decoratedNodeData } from 'components/CytoscapeGraph/CytoscapeGraphUtils';
-import { PfColors } from 'components/Pf/PfColors';
+import { PFColors } from 'components/Pf/PfColors';
 import { KialiIcon } from 'config/KialiIcon';
 
 export enum NodeMetricType {
   APP = 1,
   WORKLOAD = 2,
-  SERVICE = 3
+  SERVICE = 3,
+  AGGREGATE = 4,
+  CLUSTER = 5,
+  NAMESPACE = 6
 }
 
 export const summaryBodyTabs = style({
@@ -22,25 +23,32 @@ export const summaryBodyTabs = style({
 });
 
 export const summaryHeader: React.CSSProperties = {
-  backgroundColor: PfColors.White
+  backgroundColor: PFColors.White
 };
 
-export const summaryLabels = style({
-  marginTop: '5px',
-  marginBottom: '5px'
-});
+export const summaryPanelWidth = '25em';
 
 export const summaryPanel = style({
+  backgroundColor: PFColors.White,
+  fontSize: 'var(--graph-side-panel--font-size)',
   height: '100%',
   margin: 0,
-  minWidth: '25em',
+  minWidth: summaryPanelWidth,
   overflowY: 'scroll',
-  width: '25em'
+  padding: 0,
+  position: 'relative',
+  width: summaryPanelWidth
 });
 
 export const summaryFont: React.CSSProperties = {
   fontSize: 'var(--graph-side-panel--font-size)'
 };
+
+export const summaryTitle = style({
+  fontWeight: 'bolder',
+  marginBottom: '5px',
+  textAlign: 'left'
+});
 
 export const hr = () => {
   return <hr style={{ margin: '10px 0' }} />;
@@ -57,28 +65,23 @@ export const shouldRefreshData = (prevProps: SummaryPanelPropType, nextProps: Su
   );
 };
 
-type HealthState = {
-  health?: Health;
-  healthLoading: boolean;
-};
-
-export const updateHealth = (summaryTarget: any, stateSetter: (hs: HealthState) => void) => {
-  const healthPromise = summaryTarget.data('healthPromise');
-  if (healthPromise) {
-    stateSetter({ healthLoading: true });
-    healthPromise
-      .then(h => stateSetter({ health: h, healthLoading: false }))
-      .catch(_err => stateSetter({ health: healthNotAvailable(), healthLoading: false }));
-  } else {
-    stateSetter({ health: undefined, healthLoading: false });
-  }
-};
-
 export const getNodeMetricType = (nodeData: DecoratedGraphNodeData): NodeMetricType => {
   switch (nodeData.nodeType) {
+    case NodeType.AGGREGATE:
+      return NodeMetricType.AGGREGATE;
     case NodeType.APP:
       // treat versioned app like a workload to narrow to the specific version
       return nodeData.workload ? NodeMetricType.WORKLOAD : NodeMetricType.APP;
+    case NodeType.BOX:
+      switch (nodeData.isBox) {
+        case BoxByType.APP:
+          return NodeMetricType.APP;
+        case BoxByType.CLUSTER:
+          return NodeMetricType.CLUSTER;
+        case BoxByType.NAMESPACE:
+        default:
+          return NodeMetricType.NAMESPACE;
+      }
     case NodeType.SERVICE:
       return NodeMetricType.SERVICE;
     default:
@@ -97,7 +100,7 @@ export const getNodeMetrics = (
   requestProtocol?: string,
   quantiles?: Array<string>,
   byLabels?: Array<string>
-): Promise<Response<M.Metrics>> => {
+): Promise<Response<M.IstioMetricsMap>> => {
   const nodeData = decoratedNodeData(node);
   const options: IstioMetricsOptions = {
     queryTime: props.queryTime,
@@ -113,6 +116,8 @@ export const getNodeMetrics = (
   };
 
   switch (nodeMetricType) {
+    case NodeMetricType.AGGREGATE:
+      return API.getAggregateMetrics(nodeData.namespace, nodeData.aggregate!, nodeData.aggregateValue!, options);
     case NodeMetricType.APP:
       return API.getAppMetrics(nodeData.namespace, nodeData.app!, options);
     case NodeMetricType.SERVICE:
@@ -124,18 +129,14 @@ export const getNodeMetrics = (
   }
 };
 
-export const mergeMetricsResponses = (promises: Promise<Response<M.Metrics>>[]): Promise<Response<M.Metrics>> => {
+export const mergeMetricsResponses = (
+  promises: Promise<Response<M.IstioMetricsMap>>[]
+): Promise<Response<M.IstioMetricsMap>> => {
   return Promise.all(promises).then(responses => {
-    const metrics: M.Metrics = {
-      metrics: {},
-      histograms: {}
-    };
+    const metrics: M.IstioMetricsMap = {};
     responses.forEach(r => {
-      Object.keys(r.data.metrics).forEach(k => {
-        metrics.metrics[k] = r.data.metrics[k];
-      });
-      Object.keys(r.data.histograms).forEach(k => {
-        metrics.histograms[k] = r.data.histograms[k];
+      Object.keys(r.data).forEach(k => {
+        metrics[k] = r.data[k];
       });
     });
     return {
@@ -144,25 +145,33 @@ export const mergeMetricsResponses = (promises: Promise<Response<M.Metrics>>[]):
   });
 };
 
-export const getFirstDatapoints = (metric: M.MetricGroup): M.Datapoint[] => {
-  return metric.matrix.length > 0 ? metric.matrix[0].values : [];
+export const getFirstDatapoints = (metric?: M.Metric[]): M.Datapoint[] => {
+  return metric && metric.length > 0 ? metric[0].datapoints : [];
 };
 
 export const getDatapoints = (
-  mg: M.MetricGroup,
-  comparator: (metric: Metric, protocol?: Protocol) => boolean,
+  metrics: M.Metric[] | undefined,
+  comparator: (metric: M.Labels, protocol?: Protocol) => boolean,
   protocol?: Protocol
 ): M.Datapoint[] => {
-  if (mg && mg.matrix) {
-    const tsa: M.TimeSeries[] = mg.matrix;
-    for (let i = 0; i < tsa.length; ++i) {
-      const ts = tsa[i];
-      if (comparator(ts.metric, protocol)) {
-        return ts.values;
+  let dpsMap = new Map<number, M.Datapoint>();
+  if (metrics) {
+    for (let i = 0; i < metrics.length; ++i) {
+      const ts = metrics[i];
+      if (comparator(ts.labels, protocol)) {
+        // Sum values, because several metrics can satisfy the comparator
+        // E.g. with multiple active namespaces and node being an outsider, we need to sum datapoints for every active namespace
+        ts.datapoints.forEach(dp => {
+          const val = Number(dp[1]);
+          if (!isNaN(val)) {
+            const current = dpsMap.get(dp[0]);
+            dpsMap.set(dp[0], current ? [dp[0], current[1] + val] : [dp[0], val]);
+          }
+        });
       }
     }
   }
-  return [];
+  return Array.from(dpsMap.values());
 };
 
 export const renderNoTraffic = (protocol?: string) => {
@@ -172,5 +181,28 @@ export const renderNoTraffic = (protocol?: string) => {
         <KialiIcon.Info /> No {protocol ? protocol : ''} traffic logged.
       </div>
     </>
+  );
+};
+
+export const getTitle = (title: string): React.ReactFragment => {
+  switch (title) {
+    case NodeType.AGGREGATE:
+      title = 'Operation';
+      break;
+    case NodeType.APP:
+      title = 'Application';
+      break;
+    case NodeType.SERVICE:
+      title = 'Service';
+      break;
+    case NodeType.WORKLOAD:
+      title = 'Workload';
+      break;
+  }
+  return (
+    <div className={summaryTitle}>
+      {title}
+      <br />
+    </div>
   );
 };

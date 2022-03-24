@@ -2,28 +2,18 @@
 
 exports[`Overview page renders initial layout 1`] = `
 <Fragment>
-  <RenderHeader>
-    <Component
-      style={
-        Object {
-          "marginTop": "10px",
-        }
+  <Connect(OverviewToolbar)
+    displayMode={1}
+    onError={[Function]}
+    onRefresh={[Function]}
+    setDisplayMode={[Function]}
+    sort={[Function]}
+    statefulFilterRef={
+      Object {
+        "current": null,
       }
-    >
-      <BreadcrumbItem
-        isActive={true}
-      >
-        Namespaces
-      </BreadcrumbItem>
-    </Component>
-    <Connect(OverviewToolbar)
-      displayMode={1}
-      onError={[Function]}
-      onRefresh={[Function]}
-      setDisplayMode={[Function]}
-      sort={[Function]}
-    />
-  </RenderHeader>
+    }
+  />
   <div
     style={
       Object {
@@ -51,5 +41,14 @@ exports[`Overview page renders initial layout 1`] = `
       </EmptyStateBody>
     </EmptyState>
   </div>
+  <OverviewTrafficPolicies
+    duration={600}
+    hideConfirmModal={[Function]}
+    isOpen={false}
+    kind=""
+    load={[Function]}
+    nsTarget=""
+    opTarget=""
+  />
 </Fragment>
 `;

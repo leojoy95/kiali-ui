@@ -7,7 +7,9 @@ const widthAuto = style({
 });
 
 const spacingRight = style({
-  marginRight: '10px'
+  marginRight: '10px',
+  marginTop: '10px',
+  display: 'inline'
 });
 
 type ToolbarDropdownProps = {
@@ -19,8 +21,11 @@ type ToolbarDropdownProps = {
   nameDropdown?: string;
   options: object;
   tooltip?: string;
+  tooltipBottom?: boolean;
   value?: number | string;
   useName?: boolean;
+  classNameSelect?: string;
+  classNameToolbar?: string;
 
   handleSelect: (value: string) => void;
   onToggle?: (isOpen: boolean) => void;
@@ -69,12 +74,13 @@ export class ToolbarDropdown extends React.Component<ToolbarDropdownProps, Toolb
         isExpanded={isExpanded}
         ariaLabelledBy={this.props.id}
         isDisabled={this.props.disabled}
-        className={widthAuto}
+        className={this.props.classNameSelect ? `${this.props.classNameSelect} ${widthAuto}` : widthAuto}
       >
         {Object.keys(this.props.options).map(key => {
           return (
             <SelectOption
               key={key}
+              isDisabled={this.props.disabled}
               isSelected={key === String(this.props.value || this.state.currentValue)}
               value={`${key}`}
             >
@@ -92,7 +98,12 @@ export class ToolbarDropdown extends React.Component<ToolbarDropdownProps, Toolb
           </Text>
         )}
         {this.props.tooltip ? (
-          <Tooltip key={'ot-' + this.props.id} entryDelay={1000} content={<>{this.props.tooltip}</>}>
+          <Tooltip
+            key={'ot-' + this.props.id}
+            entryDelay={1000}
+            position={this.props.tooltipBottom ? 'bottom' : 'top'}
+            content={<>{this.props.tooltip}</>}
+          >
             {dropdownButton}
           </Tooltip>
         ) : (

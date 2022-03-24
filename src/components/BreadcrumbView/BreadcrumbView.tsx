@@ -2,7 +2,6 @@ import * as React from 'react';
 import { Paths } from '../../config';
 import { Link } from 'react-router-dom';
 import { Breadcrumb, BreadcrumbItem } from '@patternfly/react-core';
-import { ActiveFilter } from '../../types/Filters';
 import { FilterSelected } from '../Filters/StatefulFilters';
 import { dicIstioType } from '../../types/IstioConfigList';
 
@@ -29,7 +28,7 @@ const ItemNames = {
 };
 
 const IstioName = 'Istio Config';
-const ISTIO_TYPES = ['templates', 'adapters'];
+const namespaceRegex = /namespaces\/([a-z0-9-]+)\/([\w-.]+)\/([\w-.*]+)(\/([\w-.]+))?(\/([\w-.]+))?/;
 
 export class BreadcrumbView extends React.Component<BreadCumbViewProps, BreadCumbViewState> {
   static capitalize = (str: string) => {
@@ -47,21 +46,20 @@ export class BreadcrumbView extends React.Component<BreadCumbViewProps, BreadCum
   }
 
   updateItem = () => {
-    const namespaceRegex = /namespaces\/([a-z0-9-]+)\/([a-z0-9-]+)\/([a-z0-9-]+)(\/([a-z0-9-.]+))?(\/([a-z0-9-]+))?/;
-    const match = this.props.location.pathname.match(namespaceRegex) || [];
+    let regex = namespaceRegex;
+    let extension = false;
+    const match = this.props.location.pathname.match(regex) || [];
     const ns = match[1];
     const page = Paths[match[2].toUpperCase()];
     const istioType = match[3];
-    let itemName = match[3];
-    if (page === 'istio') {
-      ISTIO_TYPES.includes(istioType) ? (itemName = match[7]) : (itemName = match[5]);
-    }
+    let itemName = page !== 'istio' ? match[3] : match[5];
     return {
       namespace: ns,
       pathItem: page,
       item: itemName,
       itemName: ItemNames[page],
-      istioType: istioType
+      istioType: istioType,
+      extension: extension
     };
   };
 
@@ -76,18 +74,7 @@ export class BreadcrumbView extends React.Component<BreadCumbViewProps, BreadCum
   }
 
   cleanFilters = () => {
-    FilterSelected.setSelected([]);
-  };
-
-  updateTypeFilter = () => {
-    this.cleanFilters();
-    // When updateTypeFilter is called, selected filters are already updated with namespace. Just push additional type obj
-    const activeFilters: ActiveFilter[] = FilterSelected.getSelected();
-    activeFilters.push({
-      category: 'Istio Type',
-      value: dicIstioType[this.state.istioType || '']
-    });
-    FilterSelected.setSelected(activeFilters);
+    FilterSelected.resetFilters();
   };
 
   isIstio = () => {
@@ -95,7 +82,8 @@ export class BreadcrumbView extends React.Component<BreadCumbViewProps, BreadCum
   };
 
   getItemPage = () => {
-    return `/namespaces/${this.state.namespace}/${this.state.pathItem}/${this.state.item}`;
+    let path = `/namespaces/${this.state.namespace}/${this.state.pathItem}/${this.state.item}`;
+    return path;
   };
 
   render() {
@@ -111,28 +99,29 @@ export class BreadcrumbView extends React.Component<BreadCumbViewProps, BreadCum
       </BreadcrumbItem>
     );
     return (
-      <div className="breadcrumb">
-        <Breadcrumb>
+      <Breadcrumb>
+        <BreadcrumbItem>
+          <Link to={`/${pathItem}`} onClick={this.cleanFilters}>
+            {isIstio ? IstioName : BreadcrumbView.capitalize(pathItem)}
+          </Link>
+        </BreadcrumbItem>
+        <BreadcrumbItem>
+          <Link to={`/${pathItem}?namespaces=${namespace}`} onClick={this.cleanFilters}>
+            Namespace: {namespace}
+          </Link>
+        </BreadcrumbItem>
+        {isIstio && (
           <BreadcrumbItem>
-            <Link to={`/${pathItem}`} onClick={this.cleanFilters}>
-              {isIstio ? IstioName : BreadcrumbView.capitalize(pathItem)}
+            <Link
+              to={`/${pathItem}?namespaces=${namespace}&istiotype=${dicIstioType[this.state.istioType || '']}`}
+              onClick={this.cleanFilters}
+            >
+              {istioType ? BreadcrumbView.istioType(istioType) : istioType}
             </Link>
           </BreadcrumbItem>
-          <BreadcrumbItem>
-            <Link to={`/${pathItem}?namespaces=${namespace}`} onClick={this.cleanFilters}>
-              Namespace: {namespace}
-            </Link>
-          </BreadcrumbItem>
-          {isIstio && (
-            <BreadcrumbItem>
-              <Link to={`/${pathItem}?namespaces=${namespace}`} onClick={this.updateTypeFilter}>
-                {istioType ? BreadcrumbView.istioType(istioType) : istioType}
-              </Link>
-            </BreadcrumbItem>
-          )}
-          {linkItem}
-        </Breadcrumb>
-      </div>
+        )}
+        {linkItem}
+      </Breadcrumb>
     );
   }
 }

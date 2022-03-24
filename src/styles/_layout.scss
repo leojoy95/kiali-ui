@@ -37,7 +37,7 @@ body,
 }
 
 #basic-tabs .pf-c-tabs__list {
-  margin-left: 30px;
+  margin-left: 20px;
 }
 
 #basic-tabs .pf-c-tab-content {
@@ -45,6 +45,7 @@ body,
   height: 600px;
 }
 
-#service-tabs .pf-c-tabs__list {
+#service-tabs .pf-c-tabs__list,
+#trace-details .pf-c-tabs__list {
   background-color: white;
 }

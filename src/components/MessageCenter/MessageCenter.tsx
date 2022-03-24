@@ -11,7 +11,7 @@ import { MessageCenterActions } from 'actions/MessageCenterActions';
 
 const notificationStyle = style({
   position: 'relative',
-  zIndex: 100
+  zIndex: 500
 });
 
 type ReduxProps = {
@@ -68,8 +68,5 @@ const mapDispatchToProps = (dispatch: ThunkDispatch<KialiAppState, void, KialiAp
   };
 };
 
-const MessageCenterContainer = connect(
-  mapStateToProps,
-  mapDispatchToProps
-)(MessageCenter);
+const MessageCenterContainer = connect(mapStateToProps, mapDispatchToProps)(MessageCenter);
 export default MessageCenterContainer;

@@ -1,279 +1,154 @@
 import * as React from 'react';
-import * as API from '../../services/Api';
+import { connect } from 'react-redux';
 import { RouteComponentProps } from 'react-router-dom';
-import { emptyWorkload, Workload, WorkloadId } from '../../types/Workload';
-import { ObjectCheck, Validations, ValidationTypes } from '../../types/IstioObjects';
+import { EmptyState, EmptyStateBody, EmptyStateVariant, Tab, Title } from '@patternfly/react-core';
+import * as API from '../../services/Api';
+import { Workload, WorkloadId } from '../../types/Workload';
 import WorkloadInfo from './WorkloadInfo';
 import * as AlertUtils from '../../utils/AlertUtils';
 import IstioMetricsContainer from '../../components/Metrics/IstioMetrics';
-import { WorkloadHealth } from '../../types/Health';
 import { MetricsObjectTypes } from '../../types/Metrics';
 import CustomMetricsContainer from '../../components/Metrics/CustomMetrics';
 import { RenderHeader } from '../../components/Nav/Page';
-import { isIstioNamespace, serverConfig } from '../../config/ServerConfig';
-import BreadcrumbView from '../../components/BreadcrumbView/BreadcrumbView';
-import PfTitle from '../../components/Pf/PfTitle';
-import { EdgeLabelMode, GraphDefinition, GraphType, NodeParamsType, NodeType } from '../../types/Graph';
-import { fetchTrafficDetails } from '../../helpers/TrafficDetailsHelper';
-import TrafficDetails from '../../components/Metrics/TrafficDetails';
-import WorkloadPodLogs from './WorkloadInfo/WorkloadPodLogs';
-import { DurationInSeconds } from '../../types/Common';
-import { connect } from 'react-redux';
+import { serverConfig } from '../../config/ServerConfig';
+import WorkloadPodLogs from './WorkloadPodLogs';
+import { DurationInSeconds, TimeInMilliseconds } from '../../types/Common';
 import { KialiAppState } from '../../store/Store';
 import { durationSelector } from '../../store/Selectors';
-import { EmptyState, EmptyStateBody, EmptyStateVariant, Tab, Title } from '@patternfly/react-core';
 import ParameterizedTabs, { activeTab } from '../../components/Tab/Tabs';
-import { DurationDropdownContainer } from '../../components/DurationDropdown/DurationDropdown';
-import RefreshButtonContainer from '../../components/Refresh/RefreshButton';
-import { retrieveDuration } from 'components/Time/TimeRangeHelper';
-import TimeRangeComponent from 'components/Time/TimeRangeComponent';
-import GraphDataSource from '../../services/GraphDataSource';
+import TracesComponent from 'components/JaegerIntegration/TracesComponent';
+import { JaegerInfo } from 'types/JaegerInfo';
+import TrafficDetails from 'components/TrafficList/TrafficDetails';
+import WorkloadWizardDropdown from '../../components/IstioWizards/WorkloadWizardDropdown';
+import TimeControl from '../../components/Time/TimeControl';
+import EnvoyDetailsContainer from 'components/Envoy/EnvoyDetails';
+import { StatusState } from '../../types/StatusState';
+import { WorkloadHealth } from 'types/Health';
 
 type WorkloadDetailsState = {
-  workload: Workload;
-  validations: Validations;
-  istioEnabled: boolean;
+  workload?: Workload;
   health?: WorkloadHealth;
-  trafficData: GraphDefinition | null;
   currentTab: string;
 };
 
-type WorkloadDetailsPageProps = RouteComponentProps<WorkloadId> & {
+type ReduxProps = {
   duration: DurationInSeconds;
+  jaegerInfo?: JaegerInfo;
+  lastRefreshAt: TimeInMilliseconds;
+  statusState: StatusState;
 };
+
+type WorkloadDetailsPageProps = ReduxProps & RouteComponentProps<WorkloadId>;
 
 const tabName = 'tab';
 const defaultTab = 'info';
-const trafficTabName = 'traffic';
 
 const paramToTab: { [key: string]: number } = {
   info: 0,
   traffic: 1,
   logs: 2,
   in_metrics: 3,
-  out_metrics: 4
+  out_metrics: 4,
+  traces: 5
 };
+var nextTabIndex = 6;
 
 class WorkloadDetails extends React.Component<WorkloadDetailsPageProps, WorkloadDetailsState> {
-  private graphDataSource: GraphDataSource;
-
   constructor(props: WorkloadDetailsPageProps) {
     super(props);
-    this.state = {
-      workload: emptyWorkload,
-      validations: {},
-      istioEnabled: true, // true until proven otherwise
-      trafficData: null,
-      currentTab: activeTab(tabName, defaultTab)
-    };
-
-    this.graphDataSource = new GraphDataSource();
+    this.state = { currentTab: activeTab(tabName, defaultTab) };
   }
 
   componentDidMount(): void {
-    this.doRefresh();
+    this.fetchWorkload();
   }
 
   componentDidUpdate(prevProps: WorkloadDetailsPageProps) {
-    const aTab = activeTab(tabName, defaultTab);
+    const currentTab = activeTab(tabName, defaultTab);
     if (
       this.props.match.params.namespace !== prevProps.match.params.namespace ||
       this.props.match.params.workload !== prevProps.match.params.workload ||
-      this.state.currentTab !== aTab ||
+      this.props.lastRefreshAt !== prevProps.lastRefreshAt ||
+      currentTab !== this.state.currentTab ||
       this.props.duration !== prevProps.duration
     ) {
-      this.setState(
-        {
-          workload: emptyWorkload,
-          validations: {},
-          istioEnabled: true, // true until proven otherwise
-          currentTab: aTab,
-          health: undefined
-        },
-        () => this.doRefresh()
-      );
-    }
-  }
-
-  fetchTrafficDataOnTabChange = (tabValue: string): void => {
-    if (tabValue === trafficTabName && this.state.trafficData == null) {
-      this.fetchTrafficData();
-    }
-  };
-
-  // All information for validations is fetched in the workload, no need to add another call
-  workloadValidations(workload: Workload): Validations {
-    const noIstiosidecar: ObjectCheck = {
-      message: 'Pod has no Istio sidecar',
-      severity: ValidationTypes.Warning,
-      path: ''
-    };
-    const noAppLabel: ObjectCheck = { message: 'Pod has no app label', severity: ValidationTypes.Warning, path: '' };
-    const noVersionLabel: ObjectCheck = {
-      message: 'Pod has no version label',
-      severity: ValidationTypes.Warning,
-      path: ''
-    };
-    const pendingPod: ObjectCheck = { message: 'Pod is in Pending Phase', severity: ValidationTypes.Warning, path: '' };
-    const unknownPod: ObjectCheck = { message: 'Pod is in Unknown Phase', severity: ValidationTypes.Warning, path: '' };
-    const failedPod: ObjectCheck = { message: 'Pod is in Failed Phase', severity: ValidationTypes.Error, path: '' };
-
-    const validations: Validations = {};
-    if (workload.pods.length > 0) {
-      validations.pod = {};
-      workload.pods.forEach(pod => {
-        validations.pod[pod.name] = {
-          name: pod.name,
-          objectType: 'pod',
-          valid: true,
-          checks: []
-        };
-        if (!isIstioNamespace(this.props.match.params.namespace)) {
-          if (!pod.istioContainers || pod.istioContainers.length === 0) {
-            validations.pod[pod.name].checks.push(noIstiosidecar);
-          }
-          if (!pod.labels) {
-            validations.pod[pod.name].checks.push(noAppLabel);
-            validations.pod[pod.name].checks.push(noVersionLabel);
-          } else {
-            if (!pod.appLabel) {
-              validations.pod[pod.name].checks.push(noAppLabel);
-            }
-            if (!pod.versionLabel) {
-              validations.pod[pod.name].checks.push(noVersionLabel);
-            }
-          }
-        }
-        switch (pod.status) {
-          case 'Pending':
-            validations.pod[pod.name].checks.push(pendingPod);
-            break;
-          case 'Unknown':
-            validations.pod[pod.name].checks.push(unknownPod);
-            break;
-          case 'Failed':
-            validations.pod[pod.name].checks.push(failedPod);
-            break;
-          default:
-          // Pod healthy
-        }
-        validations.pod[pod.name].valid = validations.pod[pod.name].checks.length === 0;
-      });
-    }
-    return validations;
-  }
-
-  doRefresh = () => {
-    const currentTab = this.state.currentTab;
-    if (this.state.workload === emptyWorkload || currentTab === 'info') {
-      this.setState({ trafficData: null });
-      this.fetchWorkload();
-      this.loadMiniGraphData();
-    }
-
-    if (currentTab === 'traffic') {
-      this.fetchTrafficData();
-    }
-  };
-
-  fetchTrafficData = () => {
-    const node: NodeParamsType = {
-      workload: this.props.match.params.workload,
-      namespace: { name: this.props.match.params.namespace },
-      nodeType: NodeType.WORKLOAD,
-
-      // unneeded
-      app: '',
-      service: '',
-      version: ''
-    };
-    const restParams = {
-      duration: `${retrieveDuration() || 600}s`,
-      graphType: GraphType.WORKLOAD,
-      injectServiceNodes: true,
-      appenders: 'deadNode,serviceEntry'
-    };
-
-    fetchTrafficDetails(node, restParams).then(trafficData => {
-      if (trafficData !== undefined) {
-        this.setState({ trafficData: trafficData });
+      if (currentTab === 'info' || currentTab === 'logs' || currentTab === 'envoy') {
+        this.fetchWorkload();
       }
-    });
-  };
+      if (currentTab !== this.state.currentTab) {
+        this.setState({ currentTab: currentTab });
+      }
+    }
+  }
 
-  fetchWorkload = () => {
-    API.getWorkload(this.props.match.params.namespace, this.props.match.params.workload)
+  private fetchWorkload = () => {
+    const params: { [key: string]: string } = {
+      validate: 'true',
+      rateInterval: String(this.props.duration) + 's',
+      health: 'true'
+    };
+    API.getWorkload(this.props.match.params.namespace, this.props.match.params.workload, params)
       .then(details => {
         this.setState({
           workload: details.data,
-          validations: this.workloadValidations(details.data),
-          istioEnabled: details.data.istioSidecar
+          health: WorkloadHealth.fromJson(
+            this.props.match.params.namespace,
+            this.props.match.params.workload,
+            details.data.health,
+            { rateInterval: this.props.duration, hasSidecar: details.data.istioSidecar }
+          )
         });
-        return API.getWorkloadHealth(
-          this.props.match.params.namespace,
-          this.props.match.params.workload,
-          this.props.duration,
-          details.data.istioSidecar
-        );
       })
-      .then(health => this.setState({ health: health }))
-      .catch(error => {
-        AlertUtils.addError('Could not fetch Workload.', error);
-      });
+      .catch(error => AlertUtils.addError('Could not fetch Workload.', error));
   };
 
-  checkIstioEnabled = (validations: Validations) => {
-    let istioEnabled = true;
-    Object.keys(validations)
-      .map(key => validations[key])
-      .forEach(obj => {
-        Object.keys(obj).forEach(key => {
-          istioEnabled = obj[key].checks.filter(check => check.message === 'Pod has no Istio sidecar').length < 1;
-        });
-      });
-    return istioEnabled;
-  };
-
-  staticTabs() {
-    const hasPods = this.state.workload.pods && this.state.workload.pods.length > 0;
+  private staticTabs() {
+    const hasPods = this.state.workload?.pods.length;
+    const tabsArray: JSX.Element[] = [];
 
     const overTab = (
       <Tab title="Overview" eventKey={0} key={'Overview'}>
         <WorkloadInfo
           workload={this.state.workload}
-          namespace={this.props.match.params.namespace}
-          validations={this.state.validations}
-          istioEnabled={this.state.istioEnabled}
+          duration={this.props.duration}
           health={this.state.health}
-          miniGraphDataSource={this.graphDataSource}
+          namespace={this.props.match.params.namespace}
+          refreshWorkload={this.fetchWorkload}
         />
       </Tab>
     );
+    tabsArray.push(overTab);
+
     const trafficTab = (
       <Tab title="Traffic" eventKey={1} key={'Traffic'}>
         <TrafficDetails
-          trafficData={this.state.trafficData}
+          itemName={this.props.match.params.workload}
           itemType={MetricsObjectTypes.WORKLOAD}
           namespace={this.props.match.params.namespace}
-          workloadName={this.state.workload.name}
         />
       </Tab>
     );
+    tabsArray.push(trafficTab);
 
     const logTab = (
       <Tab title="Logs" eventKey={2} key={'Logs'}>
         {hasPods ? (
-          <WorkloadPodLogs namespace={this.props.match.params.namespace} pods={this.state.workload.pods} />
+          <WorkloadPodLogs
+            namespace={this.props.match.params.namespace}
+            workload={this.props.match.params.workload}
+            pods={this.state.workload!.pods}
+          />
         ) : (
           <EmptyState variant={EmptyStateVariant.full}>
             <Title headingLevel="h5" size="lg">
-              No logs for Workload {this.state.workload.name}
+              No logs for Workload {this.props.match.params.workload}
             </Title>
             <EmptyStateBody>There are no logs to display because the workload has no pods.</EmptyStateBody>
           </EmptyState>
         )}
       </Tab>
     );
+    tabsArray.push(logTab);
 
     const inTab = (
       <Tab title="Inbound Metrics" eventKey={3} key={'Inbound Metrics'}>
@@ -285,6 +160,7 @@ class WorkloadDetails extends React.Component<WorkloadDetailsPageProps, Workload
         />
       </Tab>
     );
+    tabsArray.push(inTab);
 
     const outTab = (
       <Tab title="Outbound Metrics" eventKey={4} key={'Outbound Metrics'}>
@@ -296,124 +172,152 @@ class WorkloadDetails extends React.Component<WorkloadDetailsPageProps, Workload
         />
       </Tab>
     );
+    tabsArray.push(outTab);
 
-    return [overTab, trafficTab, logTab, inTab, outTab];
+    if (this.props.jaegerInfo && this.props.jaegerInfo.enabled && this.props.jaegerInfo.integration) {
+      tabsArray.push(
+        <Tab eventKey={5} title="Traces" key="Traces">
+          <TracesComponent
+            namespace={this.props.match.params.namespace}
+            target={this.props.match.params.workload}
+            targetKind={'workload'}
+          />
+        </Tab>
+      );
+    }
+    if (this.state.workload && this.hasIstioSidecars(this.state.workload)) {
+      const envoyTab = (
+        <Tab title="Envoy" eventKey={10} key={'Envoy'}>
+          {this.state.workload && (
+            <EnvoyDetailsContainer namespace={this.props.match.params.namespace} workload={this.state.workload} />
+          )}
+        </Tab>
+      );
+      tabsArray.push(envoyTab);
+      paramToTab['envoy'] = 10;
+    }
+
+    // Used by the runtimes tabs
+    nextTabIndex = tabsArray.length + 1;
+
+    return tabsArray;
   }
 
-  runtimeTabs() {
-    const app = this.state.workload.labels[serverConfig.istioLabels.appLabelName];
-    const version = this.state.workload.labels[serverConfig.istioLabels.versionLabelName];
-    const isLabeled = app && version;
-    const staticTabsCount = 5;
+  private hasIstioSidecars(workload: Workload): boolean {
+    var hasIstioSidecars: boolean = false;
 
-    const tabs: JSX.Element[] = [];
-    if (isLabeled) {
-      let dynamicTabsCount: number = 0;
-      this.state.workload.runtimes.forEach(runtime => {
-        runtime.dashboardRefs.forEach(dashboard => {
-          const tabKey = dynamicTabsCount + staticTabsCount;
-          paramToTab[dashboard.template] = tabKey;
-          const tab = (
-            <Tab key={dashboard.template} title={dashboard.title} eventKey={tabKey}>
-              <CustomMetricsContainer
-                namespace={this.props.match.params.namespace}
-                app={app}
-                version={version}
-                template={dashboard.template}
-              />
-            </Tab>
-          );
-          tabs.push(tab);
-          dynamicTabsCount = dynamicTabsCount + 1;
-        });
+    if (workload.pods.length > 0) {
+      workload.pods.forEach(pod => {
+        if (pod.istioContainers && pod.istioContainers.length > 0) {
+          hasIstioSidecars = true;
+        } else {
+          hasIstioSidecars =
+            hasIstioSidecars || (!!pod.containers && pod.containers.some(cont => cont.name === 'istio-proxy'));
+        }
       });
+    }
+    return hasIstioSidecars;
+  }
+
+  private runtimeTabs() {
+    const tabs: JSX.Element[] = [];
+
+    if (this.state.workload) {
+      const app = this.state.workload.labels[serverConfig.istioLabels.appLabelName];
+      const version = this.state.workload.labels[serverConfig.istioLabels.versionLabelName];
+      const isLabeled = app && version;
+      if (isLabeled) {
+        let tabOffset = 0;
+        this.state.workload.runtimes.forEach(runtime => {
+          runtime.dashboardRefs.forEach(dashboard => {
+            if (dashboard.template !== 'envoy') {
+              const tabKey = tabOffset + nextTabIndex;
+              paramToTab[dashboard.template] = tabKey;
+              const tab = (
+                <Tab key={dashboard.template} title={dashboard.title} eventKey={tabKey}>
+                  <CustomMetricsContainer
+                    namespace={this.props.match.params.namespace}
+                    app={app}
+                    version={version}
+                    workload={this.state.workload!.name}
+                    workloadType={this.state.workload!.type}
+                    template={dashboard.template}
+                  />
+                </Tab>
+              );
+              tabs.push(tab);
+              tabOffset++;
+            }
+          });
+        });
+      }
     }
 
     return tabs;
   }
 
-  renderActions = () => {
-    let component;
-    switch (this.state.currentTab) {
-      case 'info':
-        component = <DurationDropdownContainer id="workload-info-duration-dropdown" />;
-        break;
-      case 'traffic':
-        component = (
-          <TimeRangeComponent
-            onChanged={this.fetchTrafficData}
-            allowCustom={false}
-            tooltip={'Time range for metrics'}
-          />
-        );
-        break;
-      default:
-        return undefined;
-    }
-    return (
-      <span style={{ position: 'absolute', right: '50px', zIndex: 1 }}>
-        {component}
-        <RefreshButtonContainer handleRefresh={this.doRefresh} />
-        &nbsp;
-      </span>
-    );
-  };
-
-  renderTabs() {
+  private renderTabs() {
     // PF4 Tabs doesn't support static tabs followed of an array of tabs created dynamically.
     return this.staticTabs().concat(this.runtimeTabs());
   }
 
   render() {
+    // set default to true: all dynamic tabs (unlisted below) are for runtimes dashboards, which uses custom time
+    let useCustomTime = true;
+    switch (this.state.currentTab) {
+      case 'info':
+      case 'traffic':
+        useCustomTime = false;
+        break;
+      case 'in_metrics':
+      case 'out_metrics':
+      case 'logs':
+      case 'traces':
+        useCustomTime = true;
+        break;
+    }
+    const actionsToolbar =
+      this.state.currentTab === 'info' && this.state.workload ? (
+        <WorkloadWizardDropdown
+          namespace={this.props.match.params.namespace}
+          workload={this.state.workload}
+          onChange={this.fetchWorkload}
+          statusState={this.props.statusState}
+        />
+      ) : undefined;
     return (
       <>
-        <RenderHeader>
-          <BreadcrumbView location={this.props.location} />
-          <PfTitle location={this.props.location} istio={this.state.istioEnabled} />
-          {this.renderActions()}
-        </RenderHeader>
-        <ParameterizedTabs
-          id="basic-tabs"
-          onSelect={tabValue => {
-            this.setState({ currentTab: tabValue });
-          }}
-          tabMap={paramToTab}
-          tabName={tabName}
-          defaultTab={defaultTab}
-          postHandler={this.fetchTrafficDataOnTabChange}
-          activeTab={this.state.currentTab}
-          mountOnEnter={false}
-          unmountOnExit={true}
-        >
-          {this.renderTabs()}
-        </ParameterizedTabs>
+        <RenderHeader
+          location={this.props.location}
+          rightToolbar={<TimeControl customDuration={useCustomTime} />}
+          actionsToolbar={actionsToolbar}
+        />
+        {this.state.workload && (
+          <ParameterizedTabs
+            id="basic-tabs"
+            onSelect={tabValue => {
+              this.setState({ currentTab: tabValue });
+            }}
+            tabMap={paramToTab}
+            tabName={tabName}
+            defaultTab={defaultTab}
+            activeTab={this.state.currentTab}
+            mountOnEnter={true}
+            unmountOnExit={true}
+          >
+            {this.renderTabs()}
+          </ParameterizedTabs>
+        )}
       </>
     );
   }
-
-  private loadMiniGraphData = () => {
-    this.graphDataSource.fetchGraphData({
-      namespaces: [{ name: this.props.match.params.namespace }],
-      duration: this.props.duration,
-      graphType: GraphType.WORKLOAD,
-      injectServiceNodes: true,
-      edgeLabelMode: EdgeLabelMode.NONE,
-      showSecurity: false,
-      showUnusedNodes: false,
-      node: {
-        app: '',
-        namespace: { name: this.props.match.params.namespace },
-        nodeType: NodeType.WORKLOAD,
-        service: '',
-        version: '',
-        workload: this.props.match.params.workload
-      }
-    });
-  };
 }
 
 const mapStateToProps = (state: KialiAppState) => ({
-  duration: durationSelector(state)
+  duration: durationSelector(state),
+  jaegerInfo: state.jaegerState.info,
+  lastRefreshAt: state.globalState.lastRefreshAt,
+  statusState: state.statusState
 });
 
 const WorkloadDetailsContainer = connect(mapStateToProps)(WorkloadDetails);

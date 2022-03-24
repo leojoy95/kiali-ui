@@ -1,132 +1,177 @@
 import * as React from 'react';
-import { Link } from 'react-router-dom';
-import { NodeType, GraphNodeData } from '../../types/Graph';
+import { NodeType, GraphNodeData, DestService, BoxByType, CLUSTER_DEFAULT } from '../../types/Graph';
 import { CyNode, decoratedNodeData } from '../../components/CytoscapeGraph/CytoscapeGraphUtils';
 import { KialiIcon } from 'config/KialiIcon';
-import { Tooltip, Badge, PopoverPosition, TooltipPosition } from '@patternfly/react-core';
+import { Badge, PopoverPosition } from '@patternfly/react-core';
 import { Health } from 'types/Health';
-import { HealthIndicator, DisplayMode } from 'components/Health/HealthIndicator';
+import { HealthIndicator } from 'components/Health/HealthIndicator';
+import { getPFBadge, PFBadge, PFBadges } from 'components/Pf/PfBadges';
+import KialiPageLink from 'components/Link/KialiPageLink';
+import { serverConfig } from 'config';
 
-const getBadge = (nodeData: GraphNodeData, nodeType?: NodeType) => {
+interface LinkInfo {
+  link: string;
+  displayName: string;
+  key: string;
+}
+
+const getTooltip = (tooltip: React.ReactFragment, nodeData: GraphNodeData): React.ReactFragment => {
+  const addNamespace = nodeData.isBox !== BoxByType.NAMESPACE;
+  const addCluster =
+    nodeData.isBox !== BoxByType.CLUSTER &&
+    nodeData.cluster !== CLUSTER_DEFAULT &&
+    serverConfig?.clusterInfo?.name !== nodeData.cluster;
+  return (
+    <div style={{ textAlign: 'left' }}>
+      <span>{tooltip}</span>
+      {addNamespace && <div>{`Namespace: ${nodeData.namespace}`}</div>}
+      {addCluster && <div>{`Cluster: ${nodeData.cluster}`}</div>}
+    </div>
+  );
+};
+
+export const getBadge = (nodeData: GraphNodeData, nodeType?: NodeType) => {
   switch (nodeType || nodeData.nodeType) {
+    case NodeType.AGGREGATE:
+      return getPFBadge(PFBadges.Operation.badge, getTooltip(`Operation: ${nodeData.aggregate!}`, nodeData));
     case NodeType.APP:
-      return (
-        <Tooltip position={TooltipPosition.auto} content={<>Application</>}>
-          <Badge className="virtualitem_badge_definition">A</Badge>
-        </Tooltip>
-      );
+      return getPFBadge(PFBadges.App.badge, getTooltip(PFBadges.App.tt!, nodeData));
+    case NodeType.BOX:
+      switch (nodeData.isBox) {
+        case BoxByType.APP:
+          return getPFBadge(PFBadges.App.badge, getTooltip(PFBadges.App.tt!, nodeData));
+        case BoxByType.CLUSTER:
+          return getPFBadge(PFBadges.Cluster.badge, getTooltip(PFBadges.Cluster.tt!, nodeData));
+        case BoxByType.NAMESPACE:
+          return getPFBadge(PFBadges.Namespace.badge, getTooltip(PFBadges.Namespace.tt!, nodeData));
+        default:
+          return <PFBadge badge={PFBadges.Unknown} />;
+      }
     case NodeType.SERVICE:
-      return !!nodeData.isServiceEntry ? (
-        <Tooltip
-          position={TooltipPosition.auto}
-          content={
-            <>{nodeData.isServiceEntry === 'MESH_EXTERNAL' ? 'External Service Entry' : 'Internal Service Entry'}</>
-          }
-        >
-          <Badge className="virtualitem_badge_definition">SE</Badge>
-        </Tooltip>
-      ) : (
-        <Tooltip position={TooltipPosition.auto} content={<>Service</>}>
-          <Badge className="virtualitem_badge_definition">S</Badge>
-        </Tooltip>
-      );
+      return !!nodeData.isServiceEntry
+        ? getPFBadge(
+            PFBadges.ServiceEntry.badge,
+            getTooltip(
+              nodeData.isServiceEntry.location === 'MESH_EXTERNAL'
+                ? 'External Service Entry'
+                : 'Internal Service Entry',
+              nodeData
+            )
+          )
+        : getPFBadge(PFBadges.Service.badge, getTooltip(PFBadges.Service.tt!, nodeData));
     case NodeType.WORKLOAD:
-      return (
-        <Tooltip position={TooltipPosition.auto} content={<>Workload</>}>
-          <Badge className="virtualitem_badge_definition">W</Badge>
-        </Tooltip>
-      );
+      return nodeData.hasWorkloadEntry
+        ? getPFBadge(PFBadges.WorkloadEntry.badge, getTooltip(PFBadges.WorkloadEntry.tt!, nodeData))
+        : getPFBadge(PFBadges.Workload.badge, getTooltip(PFBadges.Workload.tt!, nodeData));
     default:
-      return (
-        <Tooltip position={TooltipPosition.auto} content={<>Unknown</>}>
-          <Badge className="virtualitem_badge_definition">U</Badge>
-        </Tooltip>
-      );
+      return <PFBadge badge={PFBadges.Unknown} />;
   }
 };
 
-const getLink = (nodeData: GraphNodeData, nodeType?: NodeType) => {
-  const namespace = nodeData.namespace;
+export const getLink = (nodeData: GraphNodeData, nodeType?: NodeType, linkGenerator?: () => LinkInfo) => {
+  const { app, cluster, namespace, service, workload } = nodeData;
   if (!nodeType || nodeData.nodeType === NodeType.UNKNOWN) {
     nodeType = nodeData.nodeType;
   }
-  const { app, service, workload } = nodeData;
   let displayName: string = 'unknown';
   let link: string | undefined;
   let key: string | undefined;
 
-  switch (nodeType) {
-    case NodeType.APP:
-      link = `/namespaces/${encodeURIComponent(namespace)}/applications/${encodeURIComponent(app!)}`;
-      key = `${namespace}.app.${app}`;
-      displayName = app!;
-      break;
-    case NodeType.SERVICE:
-      if (nodeData.isServiceEntry) {
-        link = `/namespaces/${encodeURIComponent(namespace)}/istio/serviceentries/${encodeURIComponent(service!)}`;
-      } else {
-        link = `/namespaces/${encodeURIComponent(namespace)}/services/${encodeURIComponent(service!)}`;
-      }
-      key = `${namespace}.svc.${service}`;
-      displayName = service!;
-      break;
-    case NodeType.WORKLOAD:
-      link = `/namespaces/${encodeURIComponent(namespace)}/workloads/${encodeURIComponent(workload!)}`;
-      key = `${namespace}.wl.${workload}`;
-      displayName = workload!;
-      break;
-    default:
-      // NOOP
-      break;
+  if (linkGenerator) {
+    ({ displayName, link, key } = linkGenerator());
+  } else {
+    switch (nodeType) {
+      case NodeType.AGGREGATE:
+        displayName = nodeData.aggregateValue!;
+        break;
+      case NodeType.APP:
+        link = `/namespaces/${encodeURIComponent(namespace)}/applications/${encodeURIComponent(app!)}`;
+        key = `${namespace}.app.${app}`;
+        displayName = app!;
+        break;
+      case NodeType.BOX:
+        switch (nodeData.isBox) {
+          case BoxByType.APP:
+            link = `/namespaces/${encodeURIComponent(namespace)}/applications/${encodeURIComponent(app!)}`;
+            key = `${namespace}.app.${app}`;
+            displayName = app!;
+            break;
+          case BoxByType.CLUSTER:
+            displayName = cluster;
+            break;
+          case BoxByType.NAMESPACE:
+            displayName = namespace;
+            break;
+        }
+        break;
+      case NodeType.SERVICE:
+        if (nodeData.isServiceEntry) {
+          link = `/namespaces/${encodeURIComponent(
+            nodeData.isServiceEntry.namespace
+          )}/istio/serviceentries/${encodeURIComponent(service!)}`;
+        } else {
+          link = `/namespaces/${encodeURIComponent(namespace)}/services/${encodeURIComponent(service!)}`;
+        }
+        key = `${namespace}.svc.${service}`;
+        displayName = service!;
+        break;
+      case NodeType.WORKLOAD:
+        link = `/namespaces/${encodeURIComponent(namespace)}/workloads/${encodeURIComponent(workload!)}`;
+        key = `${namespace}.wl.${workload}`;
+        displayName = workload!;
+        break;
+      default:
+        // NOOP
+        break;
+    }
   }
 
   if (link && !nodeData.isInaccessible) {
     return (
-      <Link key={key} to={link}>
+      <KialiPageLink key={key} href={link} cluster={cluster}>
         {displayName}
-      </Link>
+      </KialiPageLink>
     );
   }
 
   return <span key={key}>{displayName}</span>;
 };
 
-type RenderLinkProps = {
-  nodeData: GraphNodeData;
-  nodeType?: NodeType;
-};
-
-export const RenderLink = (props: RenderLinkProps) => {
-  const link = getLink(props.nodeData, props.nodeType);
-
-  return (
-    <>
-      {link}
-      {props.nodeData.isInaccessible && (
-        <span style={{ paddingLeft: '2px' }}>
-          <KialiIcon.MtlsLock />
-        </span>
-      )}
-    </>
-  );
-};
-
 export const renderBadgedHost = (host: string) => {
   return (
-    <span>
-      <Tooltip content={<>Host</>}>
-        <Badge className="virtualitem_badge_definition">H</Badge>
-      </Tooltip>
-      {host}
-    </span>
+    <div>
+      <PFBadge badge={PFBadges.Host} />
+      {host === '*' ? '* (all hosts)' : host}
+    </div>
   );
 };
 
-export const renderBadgedLink = (nodeData: GraphNodeData, nodeType?: NodeType, label?: string) => {
-  const link = getLink(nodeData, nodeType);
+export const renderBadgedName = (nodeData: GraphNodeData, label?: string) => {
+  return (
+    <div>
+      <span style={{ marginRight: '1em', marginBottom: '3px', display: 'inline-block' }}>
+        {label && (
+          <span style={{ whiteSpace: 'pre' }}>
+            <b>{label}</b>
+          </span>
+        )}
+        {getBadge(nodeData)}
+        {getLink({ ...nodeData, isInaccessible: true })}
+      </span>
+    </div>
+  );
+};
+
+export const renderBadgedLink = (
+  nodeData: GraphNodeData,
+  nodeType?: NodeType,
+  label?: string,
+  linkGenerator?: () => LinkInfo
+) => {
+  const link = getLink(nodeData, nodeType, linkGenerator);
 
   return (
-    <>
+    <div>
       <span style={{ marginRight: '1em', marginBottom: '3px', display: 'inline-block' }}>
         {label && (
           <span style={{ whiteSpace: 'pre' }}>
@@ -137,7 +182,7 @@ export const renderBadgedLink = (nodeData: GraphNodeData, nodeType?: NodeType, l
         {link}
       </span>
       {nodeData.isInaccessible && <KialiIcon.MtlsLock />}
-    </>
+    </div>
   );
 };
 
@@ -145,19 +190,14 @@ export const renderHealth = (health?: Health) => {
   return (
     <>
       <Badge style={{ fontWeight: 'normal', marginTop: '4px', marginBottom: '4px' }} isRead={true}>
-        <span style={{ margin: '3px 0 1px 0' }}>
+        <span style={{ margin: '3px 3px 1px 0' }}>
           {health ? (
-            <HealthIndicator
-              id="graph-health-indicator"
-              mode={DisplayMode.SMALL}
-              health={health}
-              tooltipPlacement={PopoverPosition.left}
-            />
+            <HealthIndicator id="graph-health-indicator" health={health} tooltipPlacement={PopoverPosition.left} />
           ) : (
             'n/a'
           )}
         </span>
-        <span style={{ marginLeft: '4px' }}>health</span>
+        health
       </Badge>
     </>
   );
@@ -165,7 +205,7 @@ export const renderHealth = (health?: Health) => {
 
 export const renderDestServicesLinks = (node: any) => {
   const nodeData = decoratedNodeData(node);
-  const destServices = node.data(CyNode.destServices);
+  const destServices: DestService[] = node.data(CyNode.destServices);
 
   const links: any[] = [];
   if (!destServices) {
@@ -176,11 +216,12 @@ export const renderDestServicesLinks = (node: any) => {
     const serviceNodeData: GraphNodeData = {
       id: nodeData.id,
       app: '',
+      cluster: ds.cluster,
       isInaccessible: nodeData.isInaccessible,
       isOutside: nodeData.isOutside,
       isRoot: nodeData.isRoot,
       isServiceEntry: nodeData.isServiceEntry,
-      namespace: ds.namespace,
+      namespace: nodeData.isServiceEntry ? nodeData.isServiceEntry.namespace : nodeData.namespace,
       nodeType: NodeType.SERVICE,
       service: ds.name,
       version: '',

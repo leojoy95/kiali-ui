@@ -12,7 +12,13 @@ type Props = {
 class ValidationList extends React.Component<Props> {
   content() {
     return (this.props.checks || []).map((check, index) => {
-      return <Validation key={'validation-check-' + index} severity={check.severity} message={check.message} />;
+      return (
+        <Validation
+          key={'validation-check-' + index}
+          severity={check.severity}
+          message={(check.code ? check.code + ' ' : '') + check.message}
+        />
+      );
     });
   }
 
@@ -26,7 +32,9 @@ class ValidationList extends React.Component<Props> {
         enableFlip={true}
         content={isValid ? 'Valid' : this.content()}
       >
-        <Validation severity={severity} />
+        <span>
+          <Validation severity={severity} />
+        </span>
       </Tooltip>
     );
     return tooltip;

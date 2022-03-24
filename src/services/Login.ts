@@ -39,9 +39,7 @@ class AnonymousLogin implements LoginStrategy<unknown> {
       status: AuthResult.FAILURE,
       session: {
         username: API.ANONYMOUS_USER,
-        expiresOn: moment()
-          .add(1, 'd')
-          .toISOString()
+        expiresOn: moment().add(1, 'd').toISOString()
       }
     };
   }
@@ -50,21 +48,6 @@ class AnonymousLogin implements LoginStrategy<unknown> {
 interface WebLoginData {
   username: string;
   password: string;
-}
-
-class WebLogin implements LoginStrategy<WebLoginData> {
-  public async prepare(_info: AuthConfig) {
-    return AuthResult.CONTINUE;
-  }
-
-  public async perform(request: DispatchRequest<WebLoginData>): Promise<LoginResult> {
-    const session = (await API.login({ token: '', ...request.data })).data;
-
-    return {
-      status: AuthResult.SUCCESS,
-      session: session
-    };
-  }
 }
 
 class TokenLogin implements LoginStrategy<WebLoginData> {
@@ -82,13 +65,13 @@ class TokenLogin implements LoginStrategy<WebLoginData> {
   }
 }
 
-class LdapLogin implements LoginStrategy<WebLoginData> {
+class HeaderLogin implements LoginStrategy<WebLoginData> {
   public async prepare(_info: AuthConfig) {
     return AuthResult.CONTINUE;
   }
 
-  public async perform(request: DispatchRequest<WebLoginData>): Promise<LoginResult> {
-    const session = (await API.login({ token: '', ...request.data })).data;
+  public async perform(_request: NullDispatch): Promise<LoginResult> {
+    const session = (await API.login({ username: '', password: '', token: '' })).data;
 
     return {
       status: AuthResult.SUCCESS,
@@ -97,13 +80,14 @@ class LdapLogin implements LoginStrategy<WebLoginData> {
   }
 }
 
-class OpenshiftLogin implements LoginStrategy<unknown> {
+class OAuthLogin implements LoginStrategy<unknown> {
   public async prepare(info: AuthConfig) {
     if (!info.authorizationEndpoint) {
       return AuthResult.FAILURE;
     }
 
-    if (window.location.hash.startsWith('#access_token')) {
+    const pattern = /[#&](access_token|id_token)=/;
+    if (pattern.test(window.location.hash)) {
       return AuthResult.CONTINUE;
     } else {
       return AuthResult.HOLD;
@@ -133,10 +117,10 @@ export class LoginDispatcher {
     this.strategyMapping = new Map();
 
     this.strategyMapping.set(AuthStrategy.anonymous, new AnonymousLogin());
-    this.strategyMapping.set(AuthStrategy.login, new WebLogin());
-    this.strategyMapping.set(AuthStrategy.openshift, new OpenshiftLogin());
-    this.strategyMapping.set(AuthStrategy.ldap, new LdapLogin());
+    this.strategyMapping.set(AuthStrategy.openshift, new OAuthLogin());
     this.strategyMapping.set(AuthStrategy.token, new TokenLogin());
+    this.strategyMapping.set(AuthStrategy.openid, new OAuthLogin());
+    this.strategyMapping.set(AuthStrategy.header, new HeaderLogin());
   }
 
   public async prepare(): Promise<AuthResult> {

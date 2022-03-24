@@ -4,43 +4,56 @@ import { connect } from 'react-redux';
 import { ThunkDispatch } from 'redux-thunk';
 import { bindActionCreators } from 'redux';
 import { KialiAppState } from '../../../store/Store';
-import { findValueSelector, hideValueSelector, edgeLabelModeSelector } from '../../../store/Selectors';
+import { findValueSelector, hideValueSelector, edgeLabelsSelector, edgeModeSelector } from '../../../store/Selectors';
 import { GraphToolbarActions } from '../../../actions/GraphToolbarActions';
 import { KialiAppAction } from '../../../actions/KialiAppAction';
 import GraphHelpFind from '../../../pages/Graph/GraphHelpFind';
 import { CyNode, CyEdge } from '../../../components/CytoscapeGraph/CytoscapeGraphUtils';
 import * as CytoscapeGraphUtils from '../../../components/CytoscapeGraph/CytoscapeGraphUtils';
-import { Layout, EdgeLabelMode, CyData, NodeType } from '../../../types/Graph';
+import { EdgeLabelMode, NodeType, Layout, EdgeMode } from '../../../types/Graph';
 import * as AlertUtils from '../../../utils/AlertUtils';
 import { KialiIcon, defaultIconStyle } from 'config/KialiIcon';
 import { style } from 'typestyle';
 import TourStopContainer from 'components/Tour/TourStop';
 import { GraphTourStops } from 'pages/Graph/GraphHelpTour';
+import { TimeInMilliseconds } from 'types/Common';
+import { AutoComplete } from 'utils/AutoComplete';
+import { DEGRADED, FAILURE, HEALTHY } from 'types/Health';
+import { GraphFindOptions } from './GraphFindOptions';
+import history, { HistoryManager, URLParam } from '../../../app/History';
 
 type ReduxProps = {
   compressOnHide: boolean;
-  cyData: CyData | null;
-  edgeLabelMode: EdgeLabelMode;
+  edgeLabels: EdgeLabelMode[];
+  edgeMode: EdgeMode;
   findValue: string;
   hideValue: string;
   layout: Layout;
+  namespaceLayout: Layout;
   showFindHelp: boolean;
+  showIdleNodes: boolean;
+  showRank: boolean;
   showSecurity: boolean;
-  showUnusedNodes: boolean;
+  updateTime: TimeInMilliseconds;
 
-  setEdgeLabelMode: (val: EdgeLabelMode) => void;
+  setEdgeLabels: (vals: EdgeLabelMode[]) => void;
   setFindValue: (val: string) => void;
   setHideValue: (val: string) => void;
   toggleFindHelp: () => void;
   toggleGraphSecurity: () => void;
-  toggleUnusedNodes: () => void;
+  toggleIdleNodes: () => void;
+  toggleRank: () => void;
 };
 
-type GraphFindProps = ReduxProps;
+type GraphFindProps = ReduxProps & {
+  cy: any;
+  elementsChanged: boolean;
+};
 
 type GraphFindState = {
-  errorMessage: string;
+  findError?: string;
   findInputValue: string;
+  hideError?: string;
   hideInputValue: string;
 };
 
@@ -50,7 +63,7 @@ type ParsedExpression = {
 };
 
 const inputWidth = {
-  width: '10em'
+  width: 'var(--graph-find-input--width)'
 };
 
 // reduce toolbar padding from 20px to 10px to save space
@@ -59,61 +72,197 @@ const thinGroupStyle = style({
   paddingRight: '10px'
 });
 
-export class GraphFind extends React.PureComponent<GraphFindProps, GraphFindState> {
+const operands: string[] = [
+  '%grpcerr',
+  '%grpctraffic',
+  '%httperr',
+  '%httptraffic',
+  'app',
+  'circuitbreaker',
+  'cluster',
+  'destprincipal',
+  'faultinjection',
+  'grpc',
+  'grpcerr',
+  'grpcin',
+  'grpcout',
+  'healthy',
+  'http',
+  'httpin',
+  'httpout',
+  'idle',
+  'label:',
+  'mirroring',
+  'mtls',
+  'name',
+  'namespace',
+  'node',
+  'operation',
+  'outside',
+  'protocol',
+  'rank',
+  'requestrouting',
+  'requesttimeout',
+  'responsetime',
+  'service',
+  'serviceentry',
+  'sidecar',
+  'sourceprincipal',
+  'tcp',
+  'tcptrafficshifting',
+  'throughput',
+  'traffic',
+  'trafficshifting',
+  'trafficsource',
+  'version',
+  'virtualservice',
+  'tcpin',
+  'tcpout',
+  'workload',
+  'workloadentry'
+];
+
+export class GraphFind extends React.Component<GraphFindProps, GraphFindState> {
   static contextTypes = {
     router: () => null
   };
 
+  private findAutoComplete: AutoComplete;
   private findInputRef;
   private hiddenElements: any | undefined;
+  private hideAutoComplete: AutoComplete;
   private hideInputRef;
   private removedElements: any | undefined;
 
   constructor(props: GraphFindProps) {
     super(props);
-    const findValue = props.findValue ? props.findValue : '';
-    const hideValue = props.hideValue ? props.hideValue : '';
-    this.state = { errorMessage: '', findInputValue: findValue, hideInputValue: hideValue };
+
+    this.findAutoComplete = new AutoComplete(operands);
+    this.hideAutoComplete = new AutoComplete(operands);
+
+    let findValue = props.findValue ? props.findValue : '';
+    let hideValue = props.hideValue ? props.hideValue : '';
+
+    // Let URL override current redux state at construction time. Update URL as needed.
+    const urlParams = new URLSearchParams(history.location.search);
+    const urlFind = HistoryManager.getParam(URLParam.GRAPH_FIND, urlParams);
+    if (!!urlFind) {
+      if (urlFind !== findValue) {
+        findValue = urlFind;
+        props.setFindValue(urlFind);
+      }
+    } else if (!!findValue) {
+      HistoryManager.setParam(URLParam.GRAPH_FIND, findValue);
+    }
+    const urlHide = HistoryManager.getParam(URLParam.GRAPH_HIDE, urlParams);
+    if (!!urlHide) {
+      if (urlHide !== hideValue) {
+        hideValue = urlHide;
+        props.setHideValue(urlHide);
+      }
+    } else if (!!hideValue) {
+      HistoryManager.setParam(URLParam.GRAPH_HIDE, hideValue);
+    }
+
+    this.state = { findInputValue: findValue, hideInputValue: hideValue };
+
     if (props.showFindHelp) {
       props.toggleFindHelp();
     }
   }
 
+  // We only update on a change to the find/hide/compress values, or a graph change.  Although we use other props
+  // in processing (compressOnHide, layout, etc), a change to those settings will generate a graph change, so we
+  // wait for the graph change to do the update.
+  shouldComponentUpdate(nextProps: GraphFindProps, nextState: GraphFindState) {
+    const cyChanged = this.props.cy !== nextProps.cy;
+    const edgeModeChanged = this.props.edgeMode !== nextProps.edgeMode;
+    const findChanged = this.props.findValue !== nextProps.findValue;
+    const hideChanged = this.props.hideValue !== nextProps.hideValue;
+    const graphChanged = this.props.updateTime !== nextProps.updateTime;
+    const showFindHelpChanged = this.props.showFindHelp !== nextProps.showFindHelp;
+    const findErrorChanged = this.state.findError !== nextState.findError;
+    const hideErrorChanged = this.state.hideError !== nextState.hideError;
+
+    const shouldUpdate =
+      cyChanged ||
+      edgeModeChanged ||
+      findChanged ||
+      hideChanged ||
+      graphChanged ||
+      showFindHelpChanged ||
+      findErrorChanged ||
+      hideErrorChanged;
+
+    return shouldUpdate;
+  }
+
   // Note that we may have redux hide/find values set at mount-time. But because the toolbar mounts prior to
-  // the graph loading, we can't perform this graph "post-processing" until we have a valid cy graph.  We can assume
-  // that applying the find/hide on update is sufficient because  we will be updated after the cy is loaded
-  // due to a change notification for this.props.cyData.
+  // the graph loading, we can't perform this graph "post-processing" until we have a valid cy graph.  But the
+  // find/hide processing will be initiated externally (CytoscapeGraph:processgraphUpdate) when the graph is ready.
   componentDidUpdate(prevProps: GraphFindProps) {
+    if (!this.props.cy) {
+      this.hiddenElements = undefined;
+      this.removedElements = undefined;
+      return;
+    }
+
+    const edgeModeChanged = this.props.edgeMode !== prevProps.edgeMode;
     const findChanged = this.props.findValue !== prevProps.findValue;
     const hideChanged = this.props.hideValue !== prevProps.hideValue;
-    const compressOnHideChanged = this.props.compressOnHide !== prevProps.compressOnHide;
-    const layoutChanged = this.props.layout !== prevProps.layout;
-    const hadCyData = prevProps.cyData != null;
-    const hasCyData = this.props.cyData != null;
-    const graphChanged =
-      (!hadCyData && hasCyData) ||
-      (hadCyData && hasCyData && this.props.cyData!.updateTimestamp !== prevProps.cyData!.updateTimestamp);
+    const graphChanged = this.props.updateTime !== prevProps.updateTime;
+    const graphElementsChanged = graphChanged && this.props.elementsChanged;
 
-    // make sure the value is updated if there was a change
+    // ensure redux state and URL are aligned
     if (findChanged) {
-      this.setState({ findInputValue: this.props.findValue });
+      if (!this.props.findValue) {
+        HistoryManager.deleteParam(URLParam.GRAPH_FIND, true);
+      } else {
+        HistoryManager.setParam(URLParam.GRAPH_FIND, this.props.findValue);
+      }
     }
     if (hideChanged) {
-      this.setState({ hideInputValue: this.props.hideValue });
+      if (!this.props.hideValue) {
+        HistoryManager.deleteParam(URLParam.GRAPH_HIDE, true);
+      } else {
+        HistoryManager.setParam(URLParam.GRAPH_HIDE, this.props.hideValue);
+      }
     }
 
-    if (findChanged || (graphChanged && this.props.findValue)) {
-      this.handleFind();
+    // make sure the value is updated if there was a change
+    if (findChanged || (graphChanged && !!this.props.findValue)) {
+      // ensure findInputValue is aligned if findValue is set externally (e.g. resetSettings)
+      if (this.state.findInputValue !== this.props.findValue) {
+        this.setFind(this.props.findValue);
+      }
+
+      this.handleFind(this.props.cy);
     }
-    if (hideChanged || compressOnHideChanged || (graphChanged && this.props.hideValue)) {
-      this.handleHide(graphChanged, hideChanged, compressOnHideChanged, layoutChanged);
+
+    if (
+      hideChanged ||
+      (graphChanged && !!this.props.hideValue) ||
+      edgeModeChanged ||
+      this.props.edgeMode !== EdgeMode.ALL
+    ) {
+      // ensure hideInputValue is aligned if hideValue is set externally (e.g. resetSettings)
+      if (this.state.hideInputValue !== this.props.hideValue) {
+        this.setHide(this.props.hideValue);
+      }
+
+      const compressOnHideChanged = this.props.compressOnHide !== prevProps.compressOnHide;
+      this.handleHide(
+        this.props.cy,
+        hideChanged,
+        graphChanged,
+        graphElementsChanged,
+        edgeModeChanged,
+        compressOnHideChanged
+      );
     }
   }
 
   render() {
-    const isFindValid: boolean = !(this.props.findValue.length > 0 && this.state.errorMessage.length > 0);
-    const isHideValid: boolean = !(this.props.hideValue.length > 0 && this.state.errorMessage.length > 0);
-
     return (
       <TourStopContainer info={GraphTourStops.Find}>
         <Form style={{ float: 'left' }} isHorizontal={true}>
@@ -127,15 +276,20 @@ export class GraphFind extends React.PureComponent<GraphFindProps, GraphFindStat
               style={{ ...inputWidth }}
               type="text"
               autoComplete="on"
-              isValid={isFindValid}
+              isValid={!this.state.findError}
               onChange={this.updateFind}
               defaultValue={this.state.findInputValue}
-              onKeyPress={this.checkSubmitFind}
+              onKeyDownCapture={this.checkSpecialKeyFind}
               placeholder="Find..."
             />
+            <GraphFindOptions kind="find" onSelect={this.updateFindOption} />
             {this.props.findValue && (
               <Tooltip key="ot_clear_find" position="top" content="Clear Find...">
-                <Button variant={ButtonVariant.control} onClick={this.clearFind}>
+                <Button
+                  style={{ minWidth: '20px', width: '20px', paddingLeft: '5px', paddingRight: '5px', bottom: '1px' }}
+                  variant={ButtonVariant.control}
+                  onClick={() => this.setFind('')}
+                >
                   <KialiIcon.Close />
                 </Button>
               </Tooltip>
@@ -148,16 +302,21 @@ export class GraphFind extends React.PureComponent<GraphFindProps, GraphFindStat
               }}
               style={{ ...inputWidth }}
               autoComplete="on"
-              isValid={isHideValid}
+              isValid={!this.state.hideError}
               type="text"
               onChange={this.updateHide}
               defaultValue={this.state.hideInputValue}
-              onKeyPress={this.checkSubmitHide}
+              onKeyDownCapture={this.checkSpecialKeyHide}
               placeholder="Hide..."
             />
+            <GraphFindOptions kind="hide" onSelect={this.updateHideOption} />
             {this.props.hideValue && (
               <Tooltip key="ot_clear_hide" position="top" content="Clear Hide...">
-                <Button variant={ButtonVariant.control} onClick={this.clearHide}>
+                <Button
+                  style={{ minWidth: '20px', width: '20px', paddingLeft: '5px', paddingRight: '5px', bottom: '1px' }}
+                  variant={ButtonVariant.control}
+                  onClick={() => this.setHide('')}
+                >
                   <KialiIcon.Close />
                 </Button>
               </Tooltip>
@@ -165,21 +324,18 @@ export class GraphFind extends React.PureComponent<GraphFindProps, GraphFindStat
             {this.props.showFindHelp ? (
               <GraphHelpFind onClose={this.toggleFindHelp}>
                 <Button variant={ButtonVariant.link} style={{ paddingLeft: '6px' }} onClick={this.toggleFindHelp}>
-                  <KialiIcon.Help className={defaultIconStyle} />
+                  <KialiIcon.Info className={defaultIconStyle} />
                 </Button>
               </GraphHelpFind>
             ) : (
               <Tooltip key={'ot_graph_find_help'} position="top" content="Find/Hide Help...">
                 <Button variant={ButtonVariant.link} style={{ paddingLeft: '6px' }} onClick={this.toggleFindHelp}>
-                  <KialiIcon.Help className={defaultIconStyle} />
+                  <KialiIcon.Info className={defaultIconStyle} />
                 </Button>
               </Tooltip>
             )}
-            {this.state.errorMessage && (
-              <div>
-                <span style={{ color: 'red' }}>{this.state.errorMessage}</span>
-              </div>
-            )}
+            {this.state.findError && <div style={{ color: 'red' }}>{this.state.findError}</div>}
+            {this.state.hideError && <div style={{ color: 'red' }}>{this.state.hideError}</div>}
           </span>
         </Form>
       </TourStopContainer>
@@ -190,41 +346,99 @@ export class GraphFind extends React.PureComponent<GraphFindProps, GraphFindStat
     this.props.toggleFindHelp();
   };
 
+  private checkSpecialKeyFind = event => {
+    const keyCode = event.keyCode ? event.keyCode : event.which;
+    switch (keyCode) {
+      case 9: // tab (autocomplete)
+        event.preventDefault();
+        const next = this.findAutoComplete.next();
+        if (!!next) {
+          this.findInputRef.value = next;
+          this.findInputRef.scrollLeft = this.findInputRef.scrollWidth;
+          this.setState({ findInputValue: next, findError: undefined });
+        }
+        break;
+      case 13: // return (submit)
+        event.preventDefault();
+        this.submitFind();
+        break;
+      default:
+        break;
+    }
+  };
+
+  private updateFindOption = key => {
+    this.setFind(key);
+  };
+
   private updateFind = val => {
     if ('' === val) {
-      this.clearFind();
+      this.setFind('');
     } else {
-      this.setState({ findInputValue: val, errorMessage: '' });
+      const diff = Math.abs(val.length - this.state.findInputValue.length);
+      this.findAutoComplete.setInput(val, [' ', '!']);
+      this.setState({ findInputValue: val, findError: undefined });
+      // submit if length change is greater than a single key, assume browser suggestion clicked or user paste
+      if (diff > 1) {
+        this.props.setFindValue(val);
+      }
     }
   };
 
-  private updateHide = val => {
-    if ('' === val) {
-      this.clearHide();
-    } else {
-      this.setState({ hideInputValue: val, errorMessage: '' });
+  private setFind = val => {
+    // TODO: when TextInput refs are fixed in PF4 then use the ref and remove the direct HTMLElement usage
+    this.findInputRef.value = val;
+    const htmlInputElement: HTMLInputElement = document.getElementById('graph_find') as HTMLInputElement;
+    if (htmlInputElement !== null) {
+      htmlInputElement.value = val;
     }
-  };
-
-  private checkSubmitFind = event => {
-    const keyCode = event.keyCode ? event.keyCode : event.which;
-    if (keyCode === 13) {
-      event.preventDefault();
-      this.submitFind();
-    }
-  };
-
-  private checkSubmitHide = event => {
-    const keyCode = event.keyCode ? event.keyCode : event.which;
-    if (keyCode === 13) {
-      event.preventDefault();
-      this.submitHide();
-    }
+    this.findAutoComplete.setInput(val);
+    this.setState({ findInputValue: val, findError: undefined });
+    this.props.setFindValue(val);
   };
 
   private submitFind = () => {
     if (this.props.findValue !== this.state.findInputValue) {
       this.props.setFindValue(this.state.findInputValue);
+    }
+  };
+
+  private checkSpecialKeyHide = event => {
+    const keyCode = event.keyCode ? event.keyCode : event.which;
+    switch (keyCode) {
+      case 9: // tab (autocomplete)
+        event.preventDefault();
+        const next = this.hideAutoComplete.next();
+        if (!!next) {
+          this.hideInputRef.value = next;
+          this.hideInputRef.scrollLeft = this.hideInputRef.scrollWidth;
+          this.setState({ hideInputValue: next, hideError: undefined });
+        }
+        break;
+      case 13: // return (submit)
+        event.preventDefault();
+        this.submitHide();
+        break;
+      default:
+        break;
+    }
+  };
+
+  private updateHideOption = key => {
+    this.setHide(key);
+  };
+
+  private updateHide = val => {
+    if ('' === val) {
+      this.setHide('');
+    } else {
+      const diff = Math.abs(val.length - this.state.hideInputValue.length);
+      this.hideAutoComplete.setInput(val, [' ', '!']);
+      this.setState({ hideInputValue: val, hideError: undefined });
+      // submit if length change is greater than a single key, assume browser suggestion clicked or user paste
+      if (diff > 1) {
+        this.props.setHideValue(val);
+      }
     }
   };
 
@@ -234,80 +448,90 @@ export class GraphFind extends React.PureComponent<GraphFindProps, GraphFindStat
     }
   };
 
-  private clearFind = () => {
+  private setHide = val => {
     // TODO: when TextInput refs are fixed in PF4 then use the ref and remove the direct HTMLElement usage
-    this.findInputRef.value = '';
-    const htmlInputElement: HTMLInputElement = document.getElementById('graph_find') as HTMLInputElement;
-    if (htmlInputElement !== null) {
-      htmlInputElement.value = '';
-    }
-    this.setState({ findInputValue: '', errorMessage: '' });
-    this.props.setFindValue('');
-  };
-
-  private clearHide = () => {
-    // TODO: when TextInput refs are fixed in PF4 then use the ref and remove the direct HTMLElement usage
-    this.hideInputRef.value = '';
+    this.hideInputRef.value = val;
     const htmlInputElement: HTMLInputElement = document.getElementById('graph_hide') as HTMLInputElement;
     if (htmlInputElement !== null) {
-      htmlInputElement.value = '';
+      htmlInputElement.value = val;
     }
-    this.setState({ hideInputValue: '', errorMessage: '' });
-    this.props.setHideValue('');
+    this.hideAutoComplete.setInput(val);
+    this.setState({ hideInputValue: val, hideError: undefined });
+    this.props.setHideValue(val);
   };
 
   private handleHide = (
-    graphChanged: boolean,
+    cy: any,
     hideChanged: boolean,
-    compressOnHideChanged: boolean,
-    layoutChanged: boolean
+    graphChanged: boolean,
+    graphElementsChanged: boolean,
+    edgeModeChanged: boolean,
+    compressOnHideChanged: boolean
   ) => {
-    if (!this.props.cyData) {
-      console.debug('Skip Hide: cy not set.');
-      return;
-    }
+    const selector = this.parseValue(this.props.hideValue, false);
+    const checkRemovals = selector || this.props.edgeMode !== EdgeMode.ALL;
 
-    const cy = this.props.cyData.cyRef;
-    const selector = this.parseValue(this.props.hideValue);
+    console.debug(`Hide selector=[${selector}]`);
 
     cy.startBatch();
-    if (this.hiddenElements) {
-      // make visible old hide-hits
+
+    // unhide hidden elements when we are dealing with the same graph. Either way,release for garbage collection
+    if (!!this.hiddenElements && !graphChanged) {
       this.hiddenElements.style({ visibility: 'visible' });
-      this.hiddenElements = undefined;
     }
-    if (this.removedElements) {
-      // Only restore the removed nodes if we are working with the same graph.  If the graph has changed
-      // (i.e. refresh) then we have new nodes, and therefore a potential ID conflict. don't restore the
-      // removed nodes, instead, just remove our reference and they should get garbage collected.
-      if (!graphChanged) {
-        this.removedElements.restore();
+    this.hiddenElements = undefined;
+
+    // restore removed elements when we are working with the same graph. Either way,release for garbage collection.
+    if (!!this.removedElements && !graphChanged) {
+      this.removedElements.restore();
+    }
+    this.removedElements = undefined;
+
+    // select the new hide-hits
+    if (checkRemovals) {
+      let hiddenElements = cy.collection();
+
+      if (selector) {
+        // add elements described by the hide expression
+        hiddenElements = cy.$(selector);
+
+        // add nodes with only hidden edges (keep idle nodes as that is an explicit option)
+        const visibleElements = hiddenElements.absoluteComplement();
+        const nodesWithVisibleEdges = visibleElements.edges().connectedNodes();
+        const nodesWithOnlyHiddenEdges = visibleElements.nodes(`[^${CyNode.isIdle}]`).subtract(nodesWithVisibleEdges);
+        hiddenElements = hiddenElements.add(nodesWithOnlyHiddenEdges);
+
+        // add the edges connected to hidden nodes
+        hiddenElements = hiddenElements.add(hiddenElements.connectedEdges());
+
+        // subtract any appbox hits, we only hide empty appboxes
+        hiddenElements = hiddenElements.subtract(hiddenElements.filter('$node[isBox]'));
       }
-      this.removedElements = undefined;
-    }
-    if (selector) {
-      // select the new hide-hits
-      let hiddenElements = cy.$(selector);
-      // add the edges connected to hidden nodes
-      hiddenElements = hiddenElements.add(hiddenElements.connectedEdges());
-      // add nodes with only hidden edges (keep unused nodes as that is an explicit option)
-      const visibleElements = hiddenElements.absoluteComplement();
-      const nodesWithVisibleEdges = visibleElements.edges().connectedNodes();
-      const nodesWithOnlyHiddenEdges = visibleElements.nodes(`[^${CyNode.isUnused}]`).subtract(nodesWithVisibleEdges);
-      hiddenElements = hiddenElements.add(nodesWithOnlyHiddenEdges);
-      // subtract any appbox hits, we only hide empty appboxes
-      hiddenElements = hiddenElements.subtract(hiddenElements.filter('$node[isGroup]'));
+
+      if (this.props.edgeMode !== EdgeMode.ALL) {
+        // remove other unwanted edges, don't touch the remaining nodes
+        const visibleElements = hiddenElements.absoluteComplement();
+        switch (this.props.edgeMode) {
+          case EdgeMode.NONE:
+            hiddenElements = hiddenElements.add(visibleElements.edges());
+            break;
+          case EdgeMode.UNHEALTHY:
+            hiddenElements = hiddenElements.add(visibleElements.edges(`[^${CyEdge.healthStatus}]`));
+            break;
+        }
+      }
+
       if (this.props.compressOnHide) {
         this.removedElements = cy.remove(hiddenElements);
         // now subtract any appboxes that don't have any visible children
-        const hiddenAppBoxes = cy.$('$node[isGroup]').subtract(cy.$('$node[isGroup] > :inside'));
+        const hiddenAppBoxes = cy.$('$node[isBox]').subtract(cy.$('$node[isBox] > :inside'));
         this.removedElements = this.removedElements.add(cy.remove(hiddenAppBoxes));
       } else {
         // set the remaining hide-hits hidden
         this.hiddenElements = hiddenElements;
         this.hiddenElements.style({ visibility: 'hidden' });
         // now subtract any appboxes that don't have any visible children
-        const hiddenAppBoxes = cy.$('$node[isGroup]').subtract(cy.$('$node[isGroup] > :visible'));
+        const hiddenAppBoxes = cy.$('$node[isBox]').subtract(cy.$('$node[isBox] > :visible'));
         hiddenAppBoxes.style({ visibility: 'hidden' });
         this.hiddenElements = this.hiddenElements.add(hiddenAppBoxes);
       }
@@ -315,30 +539,23 @@ export class GraphFind extends React.PureComponent<GraphFindProps, GraphFindStat
 
     cy.endBatch();
 
-    const removedElements: boolean = this.removedElements && this.removedElements.size() > 0;
-    if (hideChanged || (compressOnHideChanged && selector) || removedElements) {
-      const zoom = cy.zoom();
-      const pan = cy.pan();
-      CytoscapeGraphUtils.runLayout(cy, this.props.layout);
-      if (!hideChanged && !compressOnHideChanged && !layoutChanged) {
-        if (zoom !== cy.zoom()) {
-          cy.zoom(zoom);
-        }
-        if (pan.x !== cy.pan().x || pan.y !== cy.pan().y) {
-          cy.pan(pan);
-        }
-      }
+    const hasRemovedElements: boolean = !!this.removedElements && this.removedElements.length > 0;
+    if (
+      hideChanged ||
+      (compressOnHideChanged && checkRemovals) ||
+      (hasRemovedElements && graphElementsChanged) ||
+      edgeModeChanged
+    ) {
+      cy.emit('kiali-zoomignore', [true]);
+      CytoscapeGraphUtils.runLayout(cy, this.props.layout, this.props.namespaceLayout).then(() => {
+        // do nothing, defer to CytoscapeGraph.tsx 'onlayout' event handler
+      });
     }
   };
 
-  private handleFind = () => {
-    if (!this.props.cyData) {
-      console.debug('Skip Find: cy not set.');
-      return;
-    }
-
-    const cy = this.props.cyData.cyRef;
-    const selector = this.parseValue(this.props.findValue);
+  private handleFind = (cy: any) => {
+    const selector = this.parseValue(this.props.findValue, true);
+    console.debug(`Find selector=[${selector}]`);
 
     cy.startBatch();
     // unhighlight old find-hits
@@ -350,43 +567,49 @@ export class GraphFind extends React.PureComponent<GraphFindProps, GraphFindStat
     cy.endBatch();
   };
 
-  private setErrorMsg(errorMessage: string): undefined {
-    if (errorMessage !== this.state.errorMessage) {
-      this.setState({ errorMessage: errorMessage });
+  private setError(error: string | undefined, isFind: boolean): undefined {
+    if (isFind && error !== this.state.findError) {
+      const findError = !!error ? `Find: ${error}` : undefined;
+      this.setState({ findError: findError });
+    } else if (error !== this.state.hideError) {
+      const hideError = !!error ? `Hide: ${error}` : undefined;
+      this.setState({ hideError: hideError });
     }
     return undefined;
   }
 
-  private parseValue = (val: string): string | undefined => {
+  private parseValue = (val: string, isFind: boolean): string | undefined => {
     let preparedVal = this.prepareValue(val);
     if (!preparedVal) {
       return undefined;
     }
 
-    preparedVal = preparedVal.replace(/ and /gi, ' AND ');
-    preparedVal = preparedVal.replace(/ or /gi, ' OR ');
-    const conjunctive = preparedVal.includes(' AND ');
-    const disjunctive = preparedVal.includes(' OR ');
-    if (conjunctive && disjunctive) {
-      return this.setErrorMsg(`Expression can not contain both 'AND' and 'OR'`);
-    }
-    const separator = disjunctive ? ',' : '';
-    const expressions = disjunctive ? preparedVal.split(' OR ') : preparedVal.split(' AND ');
-    let selector;
+    // generate separate selectors for each disjunctive clause and then stitch them together. This
+    // lets us mix node and edge criteria.
+    const orClauses = preparedVal.split(' OR ');
+    let orSelector;
 
-    for (const expression of expressions) {
-      const parsedExpression = this.parseExpression(expression, conjunctive, disjunctive);
-      if (!parsedExpression) {
-        return undefined;
+    for (const clause of orClauses) {
+      const expressions = clause.split(' AND ');
+      const conjunctive = expressions.length > 1;
+      let selector;
+
+      for (const expression of expressions) {
+        const parsedExpression = this.parseExpression(expression, conjunctive, isFind);
+        if (!parsedExpression) {
+          return undefined;
+        }
+        selector = this.appendSelector(selector, parsedExpression, isFind);
+        if (!selector) {
+          return undefined;
+        }
       }
-      selector = this.appendSelector(selector, parsedExpression, separator);
-      if (!selector) {
-        return undefined;
-      }
+      // parsed successfully, clear any previous error message
+      this.setError(undefined, isFind);
+      orSelector = !orSelector ? selector : `${orSelector},${selector}`;
     }
-    // parsed successfully, clear any previous error message
-    this.setErrorMsg('');
-    return selector;
+
+    return orSelector;
   };
 
   private prepareValue = (val: string): string => {
@@ -408,13 +631,18 @@ export class GraphFind extends React.PureComponent<GraphFindProps, GraphFindStat
     val = val.replace(/ contains /gi, ' *= ');
     val = val.replace(/ startswith /gi, ' ^= ');
     val = val.replace(/ endswith /gi, ' $= ');
+
+    // uppercase conjunctions
+    val = val.replace(/ and /gi, ' AND ');
+    val = val.replace(/ or /gi, ' OR ');
+
     return val.trim();
   };
 
   private parseExpression = (
     expression: string,
     conjunctive: boolean,
-    disjunctive: boolean
+    isFind: boolean
   ): ParsedExpression | undefined => {
     let op;
     if (expression.includes('!=')) {
@@ -446,17 +674,17 @@ export class GraphFind extends React.PureComponent<GraphFindProps, GraphFindStat
     }
     if (!op) {
       if (expression.split(' ').length > 1) {
-        return this.setErrorMsg(`No valid operator found in expression`);
+        return this.setError(`No valid operator found in expression`, isFind);
       }
 
       const unaryExpression = this.parseUnaryFindExpression(expression.trim(), false);
-      return unaryExpression ? unaryExpression : this.setErrorMsg(`Invalid Node or Edge operand`);
+      return unaryExpression ? unaryExpression : this.setError(`Invalid Node or Edge operand`, isFind);
     }
 
     const tokens = expression.split(op);
     if (op === '!') {
       const unaryExpression = this.parseUnaryFindExpression(tokens[1].trim(), true);
-      return unaryExpression ? unaryExpression : this.setErrorMsg(`Invalid Node or Edge operand`);
+      return unaryExpression ? unaryExpression : this.setError(`Invalid Node or Edge operand`, isFind);
     }
 
     const field = tokens[0].trim();
@@ -468,37 +696,42 @@ export class GraphFind extends React.PureComponent<GraphFindProps, GraphFindStat
       //
       case 'app':
         return { target: 'node', selector: `[${CyNode.app} ${op} "${val}"]` };
+      case 'cluster':
+        return { target: 'node', selector: `[${CyNode.cluster} ${op} "${val}"]` };
       case 'grpcin': {
-        const s = this.getNumericSelector(CyNode.grpcIn, op, val, expression);
+        const s = this.getNumericSelector(CyNode.grpcIn, op, val, expression, isFind);
         return s ? { target: 'node', selector: s } : undefined;
       }
       case 'grpcout': {
-        const s = this.getNumericSelector(CyNode.grpcOut, op, val, expression);
+        const s = this.getNumericSelector(CyNode.grpcOut, op, val, expression, isFind);
         return s ? { target: 'node', selector: s } : undefined;
       }
       case 'httpin': {
-        const s = this.getNumericSelector(CyNode.httpIn, op, val, expression);
+        const s = this.getNumericSelector(CyNode.httpIn, op, val, expression, isFind);
         return s ? { target: 'node', selector: s } : undefined;
       }
       case 'httpout': {
-        const s = this.getNumericSelector(CyNode.httpOut, op, val, expression);
+        const s = this.getNumericSelector(CyNode.httpOut, op, val, expression, isFind);
         return s ? { target: 'node', selector: s } : undefined;
       }
       case 'name': {
         const isNegation = op.startsWith('!');
-        if (disjunctive && isNegation) {
-          return this.setErrorMsg(`Can not use 'OR' with negated 'name' operand`);
-        } else if (conjunctive) {
-          return this.setErrorMsg(`Can not use 'AND' with 'name' operand`);
+        if (conjunctive) {
+          return this.setError(`Can not use 'AND' with 'name' operand`, isFind);
         }
-        const wl = `[${CyNode.workload} ${op} "${val}"]`;
+        const agg = `[${CyNode.aggregateValue} ${op} "${val}"]`;
         const app = `[${CyNode.app} ${op} "${val}"]`;
         const svc = `[${CyNode.service} ${op} "${val}"]`;
-        return { target: 'node', selector: isNegation ? `${wl}${app}${svc}` : `${wl},${app},${svc}` };
+        const wl = `[${CyNode.workload} ${op} "${val}"]`;
+        return { target: 'node', selector: isNegation ? `${agg}${app}${svc}${wl}` : `${agg},${app},${svc},${wl}` };
       }
       case 'node':
         let nodeType = val.toLowerCase();
         switch (nodeType) {
+          case 'op':
+          case 'operation':
+            nodeType = NodeType.AGGREGATE;
+            break;
           case 'svc':
             nodeType = NodeType.SERVICE;
             break;
@@ -509,27 +742,47 @@ export class GraphFind extends React.PureComponent<GraphFindProps, GraphFindStat
             break; // no-op
         }
         switch (nodeType) {
+          case NodeType.AGGREGATE:
           case NodeType.APP:
           case NodeType.SERVICE:
           case NodeType.WORKLOAD:
           case NodeType.UNKNOWN:
             return { target: 'node', selector: `[${CyNode.nodeType} ${op} "${nodeType}"]` };
           default:
-            this.setErrorMsg(`Invalid node type [${nodeType}]. Expected app | service | unknown | workload`);
+            this.setError(
+              `Invalid node type [${nodeType}]. Expected app | operation | service | unknown | workload`,
+              isFind
+            );
         }
         return undefined;
       case 'ns':
       case 'namespace':
         return { target: 'node', selector: `[${CyNode.namespace} ${op} "${val}"]` };
+      case 'op':
+      case 'operation':
+        return { target: 'node', selector: `[${CyNode.aggregateValue} ${op} "${val}"]` };
+      case 'rank': {
+        if (!this.props.showRank) {
+          AlertUtils.addSuccess('Enabling "Rank" display option for graph find/hide expression');
+          this.props.toggleRank();
+        }
+
+        const valAsNum = Number(val);
+        if (Number.isNaN(valAsNum) || valAsNum < 1 || valAsNum > 100) {
+          return this.setError(`Invalid rank range [${val}]. Expected a number between 1..100`, isFind);
+        }
+        const s = this.getNumericSelector(CyNode.rank, op, val, expression, isFind);
+        return s ? { target: 'node', selector: s } : undefined;
+      }
       case 'svc':
       case 'service':
         return { target: 'node', selector: `[${CyNode.service} ${op} "${val}"]` };
       case 'tcpin': {
-        const s = this.getNumericSelector(CyNode.tcpIn, op, val, expression);
+        const s = this.getNumericSelector(CyNode.tcpIn, op, val, expression, isFind);
         return s ? { target: 'node', selector: s } : undefined;
       }
       case 'tcpout': {
-        const s = this.getNumericSelector(CyNode.tcpOut, op, val, expression);
+        const s = this.getNumericSelector(CyNode.tcpOut, op, val, expression, isFind);
         return s ? { target: 'node', selector: s } : undefined;
       }
       case 'version':
@@ -540,30 +793,36 @@ export class GraphFind extends React.PureComponent<GraphFindProps, GraphFindStat
       //
       // edges..
       //
+      case 'destprincipal':
+        if (!this.props.showSecurity) {
+          AlertUtils.addSuccess('Enabling "Security" display option for graph find/hide expression');
+          this.props.toggleGraphSecurity();
+        }
+        return { target: 'edge', selector: `[${CyEdge.destPrincipal} ${op} "${val}"]` };
       case 'grpc': {
-        const s = this.getNumericSelector(CyEdge.grpc, op, val, expression);
+        const s = this.getNumericSelector(CyEdge.grpc, op, val, expression, isFind);
         return s ? { target: 'edge', selector: s } : undefined;
       }
       case '%grpcerror':
       case '%grpcerr': {
-        const s = this.getNumericSelector(CyEdge.grpcPercentErr, op, val, expression);
+        const s = this.getNumericSelector(CyEdge.grpcPercentErr, op, val, expression, isFind);
         return s ? { target: 'edge', selector: s } : undefined;
       }
       case '%grpctraffic': {
-        const s = this.getNumericSelector(CyEdge.grpcPercentReq, op, val, expression);
+        const s = this.getNumericSelector(CyEdge.grpcPercentReq, op, val, expression, isFind);
         return s ? { target: 'edge', selector: s } : undefined;
       }
       case 'http': {
-        const s = this.getNumericSelector(CyEdge.http, op, val, expression);
+        const s = this.getNumericSelector(CyEdge.http, op, val, expression, isFind);
         return s ? { target: 'edge', selector: s } : undefined;
       }
       case '%httperror':
       case '%httperr': {
-        const s = this.getNumericSelector(CyEdge.httpPercentErr, op, val, expression);
+        const s = this.getNumericSelector(CyEdge.httpPercentErr, op, val, expression, isFind);
         return s ? { target: 'edge', selector: s } : undefined;
       }
       case '%httptraffic': {
-        const s = this.getNumericSelector(CyEdge.httpPercentReq, op, val, expression);
+        const s = this.getNumericSelector(CyEdge.httpPercentReq, op, val, expression, isFind);
         return s ? { target: 'edge', selector: s } : undefined;
       }
       case 'protocol': {
@@ -571,30 +830,63 @@ export class GraphFind extends React.PureComponent<GraphFindProps, GraphFindStat
       }
       case 'rt':
       case 'responsetime': {
-        if (this.props.edgeLabelMode !== EdgeLabelMode.RESPONSE_TIME_95TH_PERCENTILE) {
-          AlertUtils.addSuccess('Enabling "response time" edge labels for graph find/hide expression');
-          this.props.setEdgeLabelMode(EdgeLabelMode.RESPONSE_TIME_95TH_PERCENTILE);
+        if (!this.props.edgeLabels.includes(EdgeLabelMode.RESPONSE_TIME_GROUP)) {
+          AlertUtils.addSuccess('Enabling [P95] "Response Time" edge labels for this graph find/hide expression');
+          this.props.setEdgeLabels([
+            ...this.props.edgeLabels,
+            EdgeLabelMode.RESPONSE_TIME_GROUP,
+            EdgeLabelMode.RESPONSE_TIME_P95
+          ]);
         }
-        const s = this.getNumericSelector(CyEdge.responseTime, op, val, expression);
+        const s = this.getNumericSelector(CyEdge.responseTime, op, val, expression, isFind);
         return s ? { target: 'edge', selector: s } : undefined;
       }
+      case 'sourceprincipal':
+        if (!this.props.showSecurity) {
+          AlertUtils.addSuccess('Enabling "Security" display option for this graph find/hide expression');
+          this.props.toggleGraphSecurity();
+        }
+        return { target: 'edge', selector: `[${CyEdge.sourcePrincipal} ${op} "${val}"]` };
       case 'tcp': {
-        const s = this.getNumericSelector(CyEdge.tcp, op, val, expression);
+        const s = this.getNumericSelector(CyEdge.tcp, op, val, expression, isFind);
+        return s ? { target: 'edge', selector: s } : undefined;
+      }
+      case 'throughput': {
+        if (!this.props.edgeLabels.includes(EdgeLabelMode.THROUGHPUT_GROUP)) {
+          AlertUtils.addSuccess('Enabling [Request] "Throughput" edge labels for this graph find/hide expression');
+          this.props.setEdgeLabels([
+            ...this.props.edgeLabels,
+            EdgeLabelMode.THROUGHPUT_GROUP,
+            EdgeLabelMode.THROUGHPUT_REQUEST
+          ]);
+        }
+        const s = this.getNumericSelector(CyEdge.throughput, op, val, expression, isFind);
         return s ? { target: 'edge', selector: s } : undefined;
       }
       default:
-        return this.setErrorMsg(`Invalid operand [${field}]`);
+        // special node operand
+        if (field.startsWith('label:')) {
+          return { target: 'node', selector: `[${CytoscapeGraphUtils.toSafeCyFieldName(field)} ${op} "${val}"]` };
+        }
+
+        return this.setError(`Invalid operand [${field}]`, isFind);
     }
   };
 
-  private getNumericSelector(field: string, op: string, val: any, _expression: string): string | undefined {
+  private getNumericSelector(
+    field: string,
+    op: string,
+    val: any,
+    _expression: string,
+    isFind: boolean
+  ): string | undefined {
     switch (op) {
       case '>':
       case '<':
       case '>=':
       case '<=':
         if (isNaN(val)) {
-          return this.setErrorMsg(`Invalid value [${val}]. Expected a numeric value (use . for decimals)`);
+          return this.setError(`Invalid value [${val}]. Expected a numeric value (use '.' for decimals)`, isFind);
         }
         return `[${field} ${op} ${val}]`;
       case '=':
@@ -608,7 +900,7 @@ export class GraphFind extends React.PureComponent<GraphFindProps, GraphFindStat
         }
         return `[${field} ${op} ${val}]`;
       default:
-        return this.setErrorMsg(`Invalid operator [${op}] for numeric condition`);
+        return this.setError(`Invalid operator [${op}] for numeric condition`, isFind);
     }
   }
 
@@ -622,35 +914,83 @@ export class GraphFind extends React.PureComponent<GraphFindProps, GraphFindStat
         return { target: 'node', selector: isNegation ? `[^${CyNode.hasCB}]` : `[?${CyNode.hasCB}]` };
       case 'dead':
         return { target: 'node', selector: isNegation ? `[^${CyNode.isDead}]` : `[?${CyNode.isDead}]` };
+      case 'fi':
+      case 'faultinjection':
+        return {
+          target: 'node',
+          selector: isNegation ? `[^${CyNode.hasFaultInjection}]` : `[?${CyNode.hasFaultInjection}]`
+        };
       case 'inaccessible':
         return { target: 'node', selector: isNegation ? `[^${CyNode.isInaccessible}]` : `[?${CyNode.isInaccessible}]` };
+      case 'healthy':
+        return {
+          target: 'node',
+          selector: isNegation
+            ? `[${CyNode.healthStatus} = "${FAILURE.name}"],[${CyNode.healthStatus} = "${DEGRADED.name}"]`
+            : `[${CyNode.healthStatus} = "${HEALTHY.name}"]`
+        };
+      case 'idle':
+        if (!this.props.showIdleNodes) {
+          AlertUtils.addSuccess('Enabling "Idle nodes" display option for graph find/hide expression');
+          this.props.toggleIdleNodes();
+        }
+        return { target: 'node', selector: isNegation ? `[^${CyNode.isIdle}]` : `[?${CyNode.isIdle}]` };
+      case 'mirroring':
+        return {
+          target: 'node',
+          selector: isNegation ? `[^${CyNode.hasMirroring}]` : `[?${CyNode.hasMirroring}]`
+        };
       case 'outside':
       case 'outsider':
         return { target: 'node', selector: isNegation ? `[^${CyNode.isOutside}]` : `[?${CyNode.isOutside}]` };
+      case 'rr':
+      case 'requestrouting':
+        return {
+          target: 'node',
+          selector: isNegation ? `[^${CyNode.hasRequestRouting}]` : `[?${CyNode.hasRequestRouting}]`
+        };
+      case 'rto':
+      case 'requesttimeout':
+        return {
+          target: 'node',
+          selector: isNegation ? `[^${CyNode.hasRequestTimeout}]` : `[?${CyNode.hasRequestTimeout}]`
+        };
       case 'se':
       case 'serviceentry':
         return { target: 'node', selector: isNegation ? `[^${CyNode.isServiceEntry}]` : `[?${CyNode.isServiceEntry}]` };
       case 'sc':
       case 'sidecar':
         return { target: 'node', selector: isNegation ? `[?${CyNode.hasMissingSC}]` : `[^${CyNode.hasMissingSC}]` };
+      case 'tcpts':
+      case 'tcptrafficshifting':
+        return {
+          target: 'node',
+          selector: isNegation ? `[^${CyNode.hasTCPTrafficShifting}]` : `[?${CyNode.hasTCPTrafficShifting}]`
+        };
+      case 'ts':
+      case 'trafficshifting':
+        return {
+          target: 'node',
+          selector: isNegation ? `[^${CyNode.hasTrafficShifting}]` : `[?${CyNode.hasTrafficShifting}]`
+        };
       case 'trafficsource':
       case 'root':
         return { target: 'node', selector: isNegation ? `[^${CyNode.isRoot}]` : `[?${CyNode.isRoot}]` };
-      case 'unused':
-        if (!this.props.showUnusedNodes) {
-          AlertUtils.addSuccess('Enabling "unused nodes" display option for graph find/hide expression');
-          this.props.toggleUnusedNodes();
-        }
-        return { target: 'node', selector: isNegation ? `[^${CyNode.isUnused}]` : `[?${CyNode.isUnused}]` };
       case 'vs':
       case 'virtualservice':
         return { target: 'node', selector: isNegation ? `[^${CyNode.hasVS}]` : `[?${CyNode.hasVS}]` };
+      case 'we':
+      case 'workloadentry':
+        return {
+          target: 'node',
+          selector: isNegation ? `[^${CyNode.hasWorkloadEntry}]` : `[?${CyNode.hasWorkloadEntry}]`
+        };
       //
       // edges...
       //
       case 'mtls':
         if (!this.props.showSecurity) {
-          AlertUtils.addSuccess('Enabling "security" display option for graph find/hide expression');
+          AlertUtils.addSuccess('Enabling "Security" display option for graph find/hide expression');
           this.props.toggleGraphSecurity();
         }
         return { target: 'edge', selector: isNegation ? `[${CyEdge.isMTLS} <= 0]` : `[${CyEdge.isMTLS} > 0]` };
@@ -658,6 +998,12 @@ export class GraphFind extends React.PureComponent<GraphFindProps, GraphFindStat
         return { target: 'edge', selector: isNegation ? `[^${CyEdge.hasTraffic}]` : `[?${CyEdge.hasTraffic}]` };
       }
       default:
+        // special node operand
+        if (field.startsWith('label:')) {
+          const safeFieldName = CytoscapeGraphUtils.toSafeCyFieldName(field);
+          return { target: 'node', selector: isNegation ? `[^${safeFieldName}]` : `[?${safeFieldName}]` };
+        }
+
         return undefined;
     }
   };
@@ -665,44 +1011,45 @@ export class GraphFind extends React.PureComponent<GraphFindProps, GraphFindStat
   private appendSelector = (
     selector: string,
     parsedExpression: ParsedExpression,
-    separator: string
+    isFind: boolean
   ): string | undefined => {
     if (!selector) {
       return parsedExpression.target + parsedExpression.selector;
     }
     if (!selector.startsWith(parsedExpression.target)) {
-      return this.setErrorMsg('Invalid expression. Can not mix node and edge criteria.');
+      return this.setError('Invalid expression. Can not AND node and edge criteria.', isFind);
     }
-    return selector + separator + parsedExpression.selector;
+    return selector + parsedExpression.selector;
   };
 }
 
 const mapStateToProps = (state: KialiAppState) => ({
   compressOnHide: state.graph.toolbarState.compressOnHide,
-  cyData: state.graph.cyData,
-  edgeLabelMode: edgeLabelModeSelector(state),
+  edgeLabels: edgeLabelsSelector(state),
+  edgeMode: edgeModeSelector(state),
   findValue: findValueSelector(state),
   hideValue: hideValueSelector(state),
   layout: state.graph.layout,
+  namespaceLayout: state.graph.namespaceLayout,
   showFindHelp: state.graph.toolbarState.showFindHelp,
+  showIdleNodes: state.graph.toolbarState.showIdleNodes,
+  showRank: state.graph.toolbarState.showRank,
   showSecurity: state.graph.toolbarState.showSecurity,
-  showUnusedNodes: state.graph.toolbarState.showUnusedNodes
+  updateTime: state.graph.updateTime
 });
 
 const mapDispatchToProps = (dispatch: ThunkDispatch<KialiAppState, void, KialiAppAction>) => {
   return {
-    setEdgeLabelMode: bindActionCreators(GraphToolbarActions.setEdgelLabelMode, dispatch),
+    setEdgeLabels: bindActionCreators(GraphToolbarActions.setEdgeLabels, dispatch),
     setFindValue: bindActionCreators(GraphToolbarActions.setFindValue, dispatch),
-    toggleGraphSecurity: bindActionCreators(GraphToolbarActions.toggleGraphSecurity, dispatch),
     setHideValue: bindActionCreators(GraphToolbarActions.setHideValue, dispatch),
     toggleFindHelp: bindActionCreators(GraphToolbarActions.toggleFindHelp, dispatch),
-    toggleUnusedNodes: bindActionCreators(GraphToolbarActions.toggleUnusedNodes, dispatch)
+    toggleGraphSecurity: bindActionCreators(GraphToolbarActions.toggleGraphSecurity, dispatch),
+    toggleIdleNodes: bindActionCreators(GraphToolbarActions.toggleIdleNodes, dispatch),
+    toggleRank: bindActionCreators(GraphToolbarActions.toggleRank, dispatch)
   };
 };
 
-const GraphFindContainer = connect(
-  mapStateToProps,
-  mapDispatchToProps
-)(GraphFind);
+const GraphFindContainer = connect(mapStateToProps, mapDispatchToProps)(GraphFind);
 
 export default GraphFindContainer;

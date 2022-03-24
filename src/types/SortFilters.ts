@@ -2,11 +2,9 @@ import { Health } from '../types/Health';
 
 export interface SortField<T> {
   id: string;
-  title: string;
+  title: string; // Used when building a dropdown of sort options, this is not a column header
   isNumeric: boolean;
   param: string;
-  compare: <A extends T>(a: A, b: A) => number;
+  compare: (a: T | WithHealth<T>, b: T | WithHealth<T>) => number;
 }
-
-export type HealthSortField<T> = SortField<T & { health: typeof Health }>;
-export type GenericSortField<T> = SortField<T> | HealthSortField<T>;
+type WithHealth<T> = T & { health: Health };

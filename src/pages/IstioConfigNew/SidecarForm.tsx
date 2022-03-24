@@ -1,9 +1,11 @@
 import * as React from 'react';
 import { cellWidth, ICell, Table, TableBody, TableHeader } from '@patternfly/react-table';
 import { style } from 'typestyle';
-import { PfColors } from '../../components/Pf/PfColors';
-import { Button, FormGroup, Switch, TextInput } from '@patternfly/react-core';
-import { isServerHostValid } from '../../utils/IstioConfigUtils';
+import { PFColors } from '../../components/Pf/PfColors';
+// Use TextInputBase like workaround while PF4 team work in https://github.com/patternfly/patternfly-react/issues/4072
+import { Button, FormGroup, Switch, TextInputBase as TextInput } from '@patternfly/react-core';
+import { isSidecarHostValid } from '../../utils/IstioConfigUtils';
+import { PlusCircleIcon } from '@patternfly/react-icons';
 
 const headerCells: ICell[] = [
   {
@@ -19,56 +21,62 @@ const headerCells: ICell[] = [
 
 const noEgressHostsStyle = style({
   marginTop: 15,
-  color: PfColors.Red100
+  color: PFColors.Red100
 });
 
-const hostsHelperText = 'Enter a valid FQDN host.';
+const hostsHelperText = 'Enter a valid namespace/FQDN Egress host.';
 
 export type EgressHost = {
   host: string;
 };
 
 type Props = {
-  egressHosts: EgressHost[];
-  addWorkloadSelector: boolean;
-  workloadSelectorLabels: string;
-  onAddEgressHost: (host: EgressHost) => void;
-  onChangeSelector: (
-    addWorkloadSelector: boolean,
-    workloadSelectorValid: boolean,
-    workloadSelectorLabels: string
-  ) => void;
-  onRemoveEgressHost: (index: number) => void;
+  sidecar: SidecarState;
+  onChange: (sidecar: SidecarState) => void;
 };
+
+export const SIDECAR = 'Sidecar';
+export const SIDECARS = 'sidecars';
 
 // Gateway and Sidecar states are consolidated in the parent page
 export type SidecarState = {
-  egressHosts: EgressHost[];
-  addWorkloadSelector: boolean;
-  workloadSelectorValid: boolean;
-  workloadSelectorLabels: string;
-};
-
-type State = {
   addEgressHost: EgressHost;
   addWorkloadSelector: boolean;
+  egressHosts: EgressHost[];
+  validEgressHost: boolean;
   workloadSelectorValid: boolean;
   workloadSelectorLabels: string;
-  validEgressHost: boolean;
 };
 
-class SidecarForm extends React.Component<Props, State> {
+export const isSidecarStateValid = (s: SidecarState): boolean => {
+  return s.egressHosts.length > 0 && (!s.addWorkloadSelector || (s.addWorkloadSelector && s.workloadSelectorValid));
+};
+
+export const initSidecar = (initHost: string): SidecarState => {
+  return {
+    addEgressHost: {
+      host: ''
+    },
+    addWorkloadSelector: false,
+    egressHosts: [
+      {
+        host: initHost
+      }
+    ],
+    validEgressHost: false,
+    workloadSelectorValid: false,
+    workloadSelectorLabels: ''
+  };
+};
+
+class SidecarForm extends React.Component<Props, SidecarState> {
   constructor(props: Props) {
     super(props);
-    this.state = {
-      addEgressHost: {
-        host: ''
-      },
-      addWorkloadSelector: false,
-      workloadSelectorValid: false,
-      workloadSelectorLabels: '',
-      validEgressHost: false
-    };
+    this.state = initSidecar('');
+  }
+
+  componentDidMount() {
+    this.setState(this.props.sidecar);
   }
 
   // @ts-ignore
@@ -77,10 +85,18 @@ class SidecarForm extends React.Component<Props, State> {
       title: 'Remove Server',
       // @ts-ignore
       onClick: (event, rowIndex, _rowData, _extraData) => {
-        this.props.onRemoveEgressHost(rowIndex);
+        this.setState(
+          prevState => {
+            prevState.egressHosts.splice(rowIndex, 1);
+            return {
+              egressHosts: prevState.egressHosts
+            };
+          },
+          () => this.props.onChange(this.state)
+        );
       }
     };
-    if (rowIndex < this.props.egressHosts.length) {
+    if (rowIndex < this.state.egressHosts.length) {
       return [removeAction];
     }
     return [];
@@ -92,25 +108,34 @@ class SidecarForm extends React.Component<Props, State> {
       addEgressHost: {
         host: host
       },
-      validEgressHost: isServerHostValid(host)
+      validEgressHost: isSidecarHostValid(host)
     });
   };
 
   onAddEgressHost = () => {
-    this.props.onAddEgressHost(this.state.addEgressHost);
-    this.setState({
-      addEgressHost: {
-        host: ''
-      }
-    });
+    this.setState(
+      prevState => {
+        prevState.egressHosts.push(this.state.addEgressHost);
+        return {
+          egressHosts: prevState.egressHosts,
+          addEgressHost: {
+            host: ''
+          }
+        };
+      },
+      () => this.props.onChange(this.state)
+    );
   };
 
   addWorkloadLabels = (value: string, _) => {
     if (value.length === 0) {
-      this.setState({
-        workloadSelectorValid: false,
-        workloadSelectorLabels: ''
-      });
+      this.setState(
+        {
+          workloadSelectorValid: false,
+          workloadSelectorLabels: ''
+        },
+        () => this.props.onChange(this.state)
+      );
       return;
     }
     value = value.trim();
@@ -138,18 +163,12 @@ class SidecarForm extends React.Component<Props, State> {
         workloadSelectorValid: isValid,
         workloadSelectorLabels: value
       },
-      () => {
-        this.props.onChangeSelector(
-          this.state.addWorkloadSelector,
-          this.state.workloadSelectorValid,
-          this.state.workloadSelectorLabels
-        );
-      }
+      () => this.props.onChange(this.state)
     );
   };
 
   rows() {
-    return this.props.egressHosts
+    return this.state.egressHosts
       .map((eHost, i) => ({
         key: 'eH' + i,
         cells: [<>{eHost.host}</>, '']
@@ -176,9 +195,12 @@ class SidecarForm extends React.Component<Props, State> {
               )}
             </>,
             <>
-              <Button variant="secondary" isDisabled={!this.state.validEgressHost} onClick={this.onAddEgressHost}>
-                Add Egress Host
-              </Button>
+              <Button
+                variant="link"
+                icon={<PlusCircleIcon />}
+                isDisabled={!this.state.validEgressHost}
+                onClick={this.onAddEgressHost}
+              />
             </>
           ]
         }
@@ -188,18 +210,7 @@ class SidecarForm extends React.Component<Props, State> {
   render() {
     return (
       <>
-        Egress hosts defined:
-        <Table
-          aria-label="Egress Hosts"
-          cells={headerCells}
-          rows={this.rows()}
-          // @ts-ignore
-          actionResolver={this.actionResolver}
-        >
-          <TableHeader />
-          <TableBody />
-        </Table>
-        <FormGroup label="Add Workload Selector" fieldId="workloadSelectorSwitch">
+        <FormGroup label="Workload Selector" fieldId="workloadSelectorSwitch">
           <Switch
             id="workloadSelectorSwitch"
             label={' '}
@@ -210,13 +221,7 @@ class SidecarForm extends React.Component<Props, State> {
                 prevState => ({
                   addWorkloadSelector: !prevState.addWorkloadSelector
                 }),
-                () => {
-                  this.props.onChangeSelector(
-                    this.state.addWorkloadSelector,
-                    this.state.workloadSelectorValid,
-                    this.state.workloadSelectorLabels
-                  );
-                }
+                () => this.props.onChange(this.state)
               );
             }}
           />
@@ -225,8 +230,8 @@ class SidecarForm extends React.Component<Props, State> {
           <FormGroup
             fieldId="workloadLabels"
             label="Labels"
-            helperText="One or more labels to select a workload where Sidecar is applied. Enter a label in the format <label>=<value>. Enter one or multiple labels separated by comma."
-            helperTextInvalid="Invalid labels format: One or more labels to select a workload where Sidecar is applied. Enter a label in the format <label>=<value>. Enter one or multiple labels separated by comma."
+            helperText="One or more labels to select a workload where the Sidecar is applied."
+            helperTextInvalid="Enter a label in the format <label>=<value>. Enter one or multiple labels separated by comma."
             isValid={this.state.workloadSelectorValid}
           >
             <TextInput
@@ -239,9 +244,21 @@ class SidecarForm extends React.Component<Props, State> {
             />
           </FormGroup>
         )}
-        {this.props.egressHosts.length === 0 && (
-          <div className={noEgressHostsStyle}>Sidecar has no Egress Hosts Defined</div>
-        )}
+        <FormGroup label="Egress" fieldId="egressHostTable">
+          <Table
+            aria-label="Egress Hosts"
+            cells={headerCells}
+            rows={this.rows()}
+            // @ts-ignore
+            actionResolver={this.actionResolver}
+          >
+            <TableHeader />
+            <TableBody />
+          </Table>
+          {this.state.egressHosts.length === 0 && (
+            <div className={noEgressHostsStyle}>Sidecar has no Egress Hosts Defined</div>
+          )}
+        </FormGroup>
       </>
     );
   }

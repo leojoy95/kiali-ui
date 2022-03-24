@@ -1,10 +1,15 @@
 import React, { CSSProperties } from 'react';
-import { CheckCircleIcon, ExclamationCircleIcon, ExclamationTriangleIcon } from '@patternfly/react-icons';
+import {
+  CheckCircleIcon,
+  ExclamationCircleIcon,
+  ExclamationTriangleIcon,
+  InfoCircleIcon
+} from '@patternfly/react-icons';
 import { IconType } from '@patternfly/react-icons/dist/js/createIcon';
 import { ValidationTypes } from '../../types/IstioObjects';
 import { Text, TextVariants } from '@patternfly/react-core';
 import './Validation.css';
-import { PFAlertColor } from 'components/Pf/PfColors';
+import { PFColors } from 'components/Pf/PfColors';
 
 type Props = ValidationDescription & {
   messageColor?: boolean;
@@ -26,26 +31,33 @@ export type ValidationType = {
 
 const ErrorValidation: ValidationType = {
   name: 'Not Valid',
-  color: PFAlertColor.Danger,
+  color: PFColors.Danger,
   icon: ExclamationCircleIcon
 };
 
 const WarningValidation: ValidationType = {
   name: 'Warning',
-  color: PFAlertColor.Warning,
+  color: PFColors.Warning,
   icon: ExclamationTriangleIcon
+};
+
+const InfoValidation: ValidationType = {
+  name: 'Info',
+  color: PFColors.Info,
+  icon: InfoCircleIcon
 };
 
 const CorrectValidation: ValidationType = {
   name: 'Valid',
-  color: PFAlertColor.Success,
+  color: PFColors.Success,
   icon: CheckCircleIcon
 };
 
 export const severityToValidation: { [severity: string]: ValidationType } = {
   error: ErrorValidation,
   warning: WarningValidation,
-  correct: CorrectValidation
+  correct: CorrectValidation,
+  info: InfoValidation
 };
 
 class Validation extends React.Component<Props> {
