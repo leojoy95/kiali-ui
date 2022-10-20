@@ -1,5 +1,5 @@
 # Snyk (https://snyk.io) policy file, patches or ignores known vulnerabilities.
-version: v1.13.3
+version: v1.25.0
 # ignores vulnerabilities until expiry date; change duration by modifying expiry date
 ignore:
   'npm:bootstrap:20160627':
@@ -780,3 +780,40 @@ patch:
   SNYK-JS-AXIOS-174505:
     - axios:
         patched: '2019-05-06T06:42:36.811Z'
+  SNYK-JS-LODASH-567746:
+    - babel-core > babel-types > lodash:
+        patched: '2022-10-20T19:54:15.168Z'
+    - babel-core > babel-traverse > lodash:
+        patched: '2022-10-20T19:54:15.168Z'
+    - babel-core > babel-template > lodash:
+        patched: '2022-10-20T19:54:15.168Z'
+    - '@patternfly/react-charts > victory-core > lodash':
+        patched: '2022-10-20T19:54:15.168Z'
+    - '@patternfly/react-charts > victory > victory-polar-axis > lodash':
+        patched: '2022-10-20T19:54:15.168Z'
+    - '@patternfly/react-charts > victory > victory-shared-events > lodash':
+        patched: '2022-10-20T19:54:15.168Z'
+    - '@patternfly/react-charts > victory > victory-cursor-container > lodash':
+        patched: '2022-10-20T19:54:15.168Z'
+    - '@patternfly/react-charts > victory > victory-selection-container > lodash':
+        patched: '2022-10-20T19:54:15.168Z'
+    - '@patternfly/react-charts > victory > victory-tooltip > lodash':
+        patched: '2022-10-20T19:54:15.168Z'
+    - '@patternfly/react-charts > victory > victory-voronoi-container > lodash':
+        patched: '2022-10-20T19:54:15.168Z'
+    - '@patternfly/react-charts > victory > victory-zoom-container > lodash':
+        patched: '2022-10-20T19:54:15.168Z'
+    - '@patternfly/react-styles > fbjs-scripts > babel-core > babel-types > lodash':
+        patched: '2022-10-20T19:54:15.168Z'
+    - '@patternfly/react-styles > fbjs-scripts > babel-core > babel-traverse > lodash':
+        patched: '2022-10-20T19:54:15.168Z'
+    - '@patternfly/react-styles > fbjs-scripts > babel-core > babel-template > lodash':
+        patched: '2022-10-20T19:54:15.168Z'
+    - '@patternfly/react-table > @patternfly/react-styles > fbjs-scripts > babel-core > babel-types > lodash':
+        patched: '2022-10-20T19:54:15.168Z'
+    - '@patternfly/react-table > @patternfly/react-styles > fbjs-scripts > babel-core > babel-traverse > lodash':
+        patched: '2022-10-20T19:54:15.168Z'
+    - '@patternfly/react-table > @patternfly/react-styles > fbjs-scripts > babel-core > babel-template > lodash':
+        patched: '2022-10-20T19:54:15.168Z'
+    - react-scripts > jest-environment-jsdom-fourteen > jsdom > request-promise-native > request-promise-core > lodash:
+        patched: '2022-10-20T19:54:15.168Z'
