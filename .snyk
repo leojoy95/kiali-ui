@@ -1,5 +1,5 @@
 # Snyk (https://snyk.io) policy file, patches or ignores known vulnerabilities.
-version: v1.13.3
+version: v1.25.1
 # ignores vulnerabilities until expiry date; change duration by modifying expiry date
 ignore:
   'npm:bootstrap:20160627':
@@ -780,3 +780,44 @@ patch:
   SNYK-JS-AXIOS-174505:
     - axios:
         patched: '2019-05-06T06:42:36.811Z'
+  SNYK-JS-LODASH-567746:
+    - babel-core > babel-generator > babel-types > lodash:
+        patched: '2023-05-28T09:37:14.660Z'
+    - babel-core > babel-helpers > babel-template > lodash:
+        patched: '2023-05-28T09:37:14.660Z'
+    - babel-core > babel-helpers > babel-template > babel-traverse > lodash:
+        patched: '2023-05-28T09:37:14.660Z'
+    - '@patternfly/react-styles > fbjs-scripts > babel-core > babel-generator > babel-types > lodash':
+        patched: '2023-05-28T09:37:14.660Z'
+    - '@patternfly/react-styles > fbjs-scripts > babel-core > babel-helpers > babel-template > lodash':
+        patched: '2023-05-28T09:37:14.660Z'
+    - '@patternfly/react-table > @patternfly/react-core > @patternfly/react-styles > fbjs-scripts > babel-core > lodash':
+        patched: '2023-05-28T09:37:14.660Z'
+    - '@patternfly/react-core > @patternfly/react-styles > fbjs-scripts > babel-core > babel-generator > babel-types > lodash':
+        patched: '2023-05-28T09:37:14.660Z'
+    - '@patternfly/react-table > @patternfly/react-core > @patternfly/react-styles > fbjs-scripts > babel-core > babel-generator > lodash':
+        patched: '2023-05-28T09:37:14.660Z'
+    - '@patternfly/react-styles > fbjs-scripts > babel-core > babel-helpers > babel-template > babel-traverse > lodash':
+        patched: '2023-05-28T09:37:14.660Z'
+    - '@patternfly/react-core > @patternfly/react-styles > fbjs-scripts > babel-core > babel-helpers > babel-template > lodash':
+        patched: '2023-05-28T09:37:14.660Z'
+    - '@patternfly/react-table > @patternfly/react-core > @patternfly/react-styles > fbjs-scripts > babel-core > babel-register > lodash':
+        patched: '2023-05-28T09:37:14.660Z'
+    - '@patternfly/react-table > @patternfly/react-core > @patternfly/react-styles > fbjs-scripts > babel-preset-fbjs > babel-plugin-transform-es2015-block-scoping > lodash':
+        patched: '2023-05-28T09:37:14.660Z'
+    - '@patternfly/react-table > @patternfly/react-core > @patternfly/react-styles > jsdom > request-promise-native > request-promise-core > lodash':
+        patched: '2023-05-28T09:37:14.660Z'
+    - react-scripts > @svgr/webpack > @babel/preset-env > @babel/plugin-proposal-unicode-property-regex > @babel/helper-create-regexp-features-plugin > @babel/helper-regex > lodash:
+        patched: '2023-05-28T09:37:14.660Z'
+    - '@patternfly/react-table > @patternfly/react-core > @patternfly/react-styles > fbjs-scripts > babel-core > babel-generator > babel-types > lodash':
+        patched: '2023-05-28T09:37:14.660Z'
+    - '@patternfly/react-core > @patternfly/react-styles > fbjs-scripts > babel-core > babel-helpers > babel-template > babel-traverse > lodash':
+        patched: '2023-05-28T09:37:14.660Z'
+    - '@patternfly/react-table > @patternfly/react-core > @patternfly/react-styles > fbjs-scripts > babel-core > babel-helpers > babel-template > lodash':
+        patched: '2023-05-28T09:37:14.660Z'
+    - '@patternfly/react-table > @patternfly/react-core > @patternfly/react-styles > fbjs-scripts > babel-preset-fbjs > babel-plugin-transform-es2015-classes > babel-helper-define-map > lodash':
+        patched: '2023-05-28T09:37:14.660Z'
+    - '@patternfly/react-table > @patternfly/react-core > @patternfly/react-styles > fbjs-scripts > babel-core > babel-helpers > babel-template > babel-traverse > lodash':
+        patched: '2023-05-28T09:37:14.660Z'
+    - react-scripts > jest > jest-cli > @jest/core > @jest/reporters > jest-runtime > jest-config > jest-environment-jsdom > jsdom > request-promise-native > request-promise-core > lodash:
+        patched: '2023-05-28T09:37:14.660Z'
